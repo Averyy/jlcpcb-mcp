@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JLCPCB MCP Server - Search Electronic Components in Claude & Cursor</title>
+    <meta name="description" content="JLCPCB MCP server for Claude, Cursor, and AI coding assistants. Search 1.5M+ electronic components with real-time stock, pricing tiers, and datasheets. No API key required.">
+    <meta name="keywords" content="JLCPCB, MCP, MCP server, JLCPCB MCP, electronic components, PCB assembly, SMT parts, Claude MCP, Cursor MCP, AI coding, LCSC parts, ESP32, STM32, capacitors, resistors, Model Context Protocol">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://jlcmcp.dev/">
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml">
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="JLCMCP" />
+    <link rel="manifest" href="site.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jlcmcp.dev/">
+    <meta property="og:title" content="JLCPCB MCP Server - Search Electronic Components in Claude & Cursor">
+    <meta property="og:description" content="Search 1.5M+ JLCPCB electronic components via MCP. Real-time stock, pricing, datasheets.">
+    <meta property="og:image" content="https://jlcmcp.dev/jlcmcp-og.png">
+    <meta property="og:image:width" content="3408">
+    <meta property="og:image:height" content="1828">
+    <meta property="og:image:alt" content="JLCPCB MCP - Search 1.5M+ electronic components via MCP">
+    <meta property="og:site_name" content="JLCPCB MCP">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="JLCPCB MCP Server - Search Electronic Components in Claude & Cursor">
+    <meta name="twitter:description" content="Search 1.5M+ JLCPCB electronic components via MCP. Real-time stock, pricing, datasheets.">
+    <meta name="twitter:image" content="https://jlcmcp.dev/jlcmcp-og.png">
+    <meta name="twitter:image:alt" content="JLCPCB MCP - Search 1.5M+ electronic components via MCP">
+
+    <!-- Additional SEO -->
+    <meta name="author" content="JLCPCB MCP">
+    <meta name="generator" content="Hand-crafted HTML">
+    <link rel="me" href="https://github.com/Averyy/jlcpcb-mcp">
+
+    <!-- Schema.org JSON-LD -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "JLCPCB MCP",
+        "description": "Search 1.5M+ JLCPCB electronic components via MCP. Real-time stock, pricing tiers, datasheets.",
+        "url": "https://jlcmcp.dev/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "featureList": [
+            "Search 1.5M+ electronic components",
+            "Real-time stock levels",
+            "Pricing tiers from 1pc to 10,000+",
+            "Datasheet links",
+            "52 component categories",
+            "No API key required"
+        ],
+        "sameAs": [
+            "https://github.com/Averyy/jlcpcb-mcp"
+        ]
+    }
+    </script>
+
+    <meta name="theme-color" content="#0a0a0a">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --bg-tertiary: #1a1a1a;
+            --bg-card: #111111;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1a1;
+            --text-tertiary: #666666;
+            --border-light: #262626;
+            --border-medium: #333333;
+            --accent: #0072FC;
+            --accent-light: #3d94ff;
+            --terminal-bg: #0d0d0d;
+            --terminal-header: #1a1a1a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+
+        /* Navigation - Apple Glass */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 16px 0;
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.03) 0%,
+                rgba(255, 255, 255, 0.01) 50%,
+                rgba(255, 255, 255, 0.03) 100%
+            );
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        main, footer {
+            position: relative;
+            z-index: 2;
+        }
+
+        nav .container { display: flex; justify-content: space-between; align-items: center; }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.01em;
+        }
+
+        .nav-logo .logo-jlcpcb { font-weight: 300; }
+        .nav-logo .logo-mcp { font-weight: 700; }
+
+        .nav-logo img { height: 28px; width: auto; }
+
+        .nav-links { display: flex; gap: 32px; align-items: center; }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        .nav-links a.nav-github {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nav-links a.nav-github svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+        /* Hero */
+        .hero {
+            padding: 160px 0 80px;
+            text-align: center;
+            position: relative;
+        }
+
+        .hero .container {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Gradient orbs container */
+        .gradient-orbs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            overflow: visible;
+        }
+
+        .gradient-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            will-change: transform;
+        }
+
+        .gradient-orb-1 {
+            top: -15%;
+            left: -5%;
+            width: 1000px;
+            height: 600px;
+            background: rgba(30, 100, 200, 0.32);
+        }
+
+        .gradient-orb-2 {
+            top: 25%;
+            right: -20%;
+            width: 900px;
+            height: 550px;
+            background: rgba(50, 130, 220, 0.22);
+        }
+
+        .gradient-orb-3 {
+            top: 55%;
+            left: -15%;
+            width: 850px;
+            height: 500px;
+            background: rgba(40, 110, 180, 0.25);
+        }
+
+        .gradient-orb-4 {
+            top: 85%;
+            right: -10%;
+            width: 750px;
+            height: 450px;
+            background: rgba(60, 140, 240, 0.18);
+        }
+
+        .gradient-orb-5 {
+            top: 120%;
+            left: 10%;
+            width: 800px;
+            height: 480px;
+            background: rgba(35, 90, 170, 0.22);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.06) 0%,
+                rgba(255, 255, 255, 0.02) 100%
+            );
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 100px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .status-badge .icon {
+            font-size: 0.75rem;
+        }
+
+        .hero h1 {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .hero-subtitle {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            max-width: 560px;
+            margin: 0 auto 40px;
+            line-height: 1.7;
+        }
+
+        .hero-cta {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            max-width: 800px;
+            margin: 0 auto 16px;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 0 28px;
+            height: 48px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-primary:hover { background: var(--accent-light); }
+        .btn-text-short { display: none; }
+        .btn-text-full { display: inline; }
+
+        .btn-code {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 20px;
+            height: 48px;
+            white-space: nowrap;
+            flex: 1;
+            background: rgba(20, 20, 22, 0.75);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+        .btn-code:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.1) 0%,
+                rgba(255, 255, 255, 0.04) 100%
+            );
+        }
+
+        .code-cli { color: #7dd3fc; }
+        .code-cmd { color: #86efac; }
+        .code-flag { color: #a1a1a6; }
+        .code-arg { color: #86efac; }
+        .code-name { color: #5a9cf5; }
+        .code-url { color: #86efac; }
+
+        .hero-link {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        .hero-link a {
+            color: var(--text-secondary);
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            transition: color 0.2s;
+        }
+        .hero-link a:hover { color: var(--accent); }
+
+        /* Terminal Demo */
+        .terminal-section {
+            max-width: 800px;
+            margin: 64px auto 0;
+        }
+
+        .terminal-wrapper {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow:
+                0 25px 50px -12px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .terminal-accent {
+            height: 48px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2a4a6f 100%);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+        }
+
+        .terminal-title {
+            flex: 1;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 8px;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .terminal-body {
+            background: rgba(20, 20, 22, 0.75);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            padding: 24px 28px;
+            height: 368px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.05rem;
+            line-height: 1.9;
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .terminal-line {
+            margin-bottom: 2px;
+            white-space: pre;
+            opacity: 0;
+            animation: terminalFadeIn 0.15s ease-out forwards;
+        }
+
+        @keyframes terminalFadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .terminal-prompt { color: #7a7a7a; }
+        .terminal-command { color: #f5a623; }
+        .terminal-output { color: #6b6b6b; }
+        .terminal-success { color: #5a9cf5; }
+        .terminal-result { color: #8a8a8a; }
+        .terminal-dollar { color: #5a9cf5; font-weight: 500; }
+        .terminal-spinner {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid #6b6b6b;
+            border-top-color: #bbb;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            margin-bottom: 4px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Sections */
+        section { padding: 80px 0; }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 56px;
+        }
+
+        .section-header h2 {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 2.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            font-size: 1.0625rem;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        /* Setup Tabs - Apple Glass Effect */
+        .setup-section {
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.05) 0%,
+                rgba(255, 255, 255, 0.02) 50%,
+                rgba(255, 255, 255, 0.05) 100%
+            );
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .tabs-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 32px;
+        }
+
+        .tabs {
+            display: inline-flex;
+            gap: 4px;
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.04) 0%,
+                rgba(255, 255, 255, 0.01) 100%
+            );
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab:hover { color: var(--text-primary); }
+        .tab.active { background: var(--bg-tertiary); color: var(--text-primary); }
+
+        .tab-content { display: none; max-width: 680px; margin: 0 auto; }
+        .tab-content.active { display: block; }
+
+        .code-block {
+            background: var(--terminal-bg);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .code-header {
+            padding: 14px 20px;
+            background: var(--terminal-header);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .code-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            color: rgba(255, 255, 255, 0.8);
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; border-color: #fff; }
+
+        .code-body {
+            padding: 20px;
+            overflow-x: auto;
+            background: rgba(20, 20, 22, 0.75);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+        }
+
+        pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            line-height: 1.7;
+            color: #e5e5e5;
+        }
+
+        .string { color: #7dd3fc; }
+
+        /* Bento Grid */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: auto auto auto;
+            gap: 16px;
+        }
+
+        .bento-card {
+            padding: 24px;
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.04) 0%,
+                rgba(255, 255, 255, 0.01) 100%
+            );
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bento-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-4px) scale(1.02);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .bento-card .icon-wrapper {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .bento-card .icon {
+            font-size: 2rem;
+            display: block;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .bento-card:hover .icon {
+            transform: scale(1.15) rotate(6deg);
+        }
+
+        .bento-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .bento-card p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        .bento-card code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            background: rgba(90, 156, 245, 0.15);
+            color: #5a9cf5;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Bento card sizes */
+        .bento-large {
+            grid-column: span 2;
+            grid-row: span 2;
+            padding: 32px;
+        }
+
+        .bento-large .icon {
+            font-size: 3rem;
+        }
+
+        .bento-large .icon-wrapper {
+            margin-bottom: 20px;
+        }
+
+        .bento-large h3 {
+            font-size: 1.25rem;
+            margin-bottom: 12px;
+        }
+
+        .bento-large p {
+            font-size: 0.9375rem;
+        }
+
+        .bento-wide {
+            grid-column: span 2;
+        }
+
+        .bento-tall {
+            grid-row: span 2;
+        }
+
+        /* Animated gradient border on hover */
+        .bento-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 20px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(90, 156, 245, 0), rgba(90, 156, 245, 0));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            transition: background 0.4s ease;
+            pointer-events: none;
+        }
+
+        .bento-card:hover::before {
+            background: linear-gradient(135deg, rgba(90, 156, 245, 0.5), rgba(60, 180, 255, 0.3));
+        }
+
+        /* Tools list in bento card */
+        .bento-card .tools-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .bento-card .tools-list .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bento-card .tools-list code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #74a4e1;
+            background: rgb(0 0 0 / 40%);
+            padding: 4px 8px;
+            border-radius: 5px;
+            white-space: nowrap;
+            width: 150px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .bento-card .tools-list span {
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+            line-height: 1.4;
+        }
+
+        /* Footer */
+        footer {
+            padding: 60px 0;
+            background: linear-gradient(
+                135deg,
+                rgba(20, 40, 80, 0.3) 0%,
+                rgba(15, 30, 60, 0.2) 50%,
+                rgba(20, 40, 80, 0.3) 100%
+            );
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-top: 1px solid rgba(100, 150, 255, 0.1);
+            box-shadow:
+                inset 0 1px 0 rgba(100, 150, 255, 0.08),
+                0 -10px 40px rgba(20, 50, 100, 0.2);
+        }
+
+        .footer-legal {
+            text-align: left;
+        }
+
+        .footer-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+        }
+
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.8125rem;
+        }
+
+        .footer-brand img {
+            height: 20px;
+        }
+
+        .footer-brand .logo-jlcpcb {
+            font-weight: 300;
+        }
+
+        .footer-brand .logo-mcp {
+            font-weight: 700;
+        }
+
+        .footer-brand .separator {
+            margin: 0 6px;
+            color: var(--text-tertiary);
+        }
+
+        .footer-legal .footer-contact a {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.8125rem;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-legal .footer-contact a:hover {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .footer-legal p {
+            color: #888;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .footer-legal p:last-child {
+            margin-bottom: 0;
+        }
+
+        .footer-legal a {
+            color: var(--text-tertiary);
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            transition: color 0.2s;
+        }
+
+        .footer-legal a:hover {
+            color: var(--text-secondary);
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .hero { padding: 140px 0 60px; }
+            .hero h1 { font-size: 2.5rem; }
+            .nav-links { display: none; }
+            .bento-grid { grid-template-columns: 1fr 1fr; }
+            .bento-large { grid-column: span 2; grid-row: span 1; }
+            .bento-wide { grid-column: span 2; }
+            .footer-content { flex-direction: column; gap: 20px; text-align: center; }
+            .tabs { flex-wrap: wrap; justify-content: center; }
+            .hero-cta { flex-wrap: nowrap; }
+            .btn-code { overflow-x: auto; flex-shrink: 1; min-width: 0; }
+            .btn-text-short { display: inline; }
+            .btn-text-full { display: none; }
+        }
+
+        @media (max-width: 480px) {
+            .bento-grid { grid-template-columns: 1fr; }
+            .bento-large, .bento-wide { grid-column: span 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="gradient-orbs">
+        <div class="gradient-orb gradient-orb-1"></div>
+        <div class="gradient-orb gradient-orb-2"></div>
+        <div class="gradient-orb gradient-orb-3"></div>
+        <div class="gradient-orb gradient-orb-4"></div>
+        <div class="gradient-orb gradient-orb-5"></div>
+    </div>
+
+    <nav>
+        <div class="container">
+            <a href="#" class="nav-logo">
+                <img src="favicon.svg" alt="JLCPCB MCP">
+                <span class="logo-text"><span class="logo-jlcpcb">JLCPCB</span><span class="logo-mcp">MCP</span></span>
+            </a>
+            <div class="nav-links">
+                <a href="#setup">Setup</a>
+                <a href="#features">Tools</a>
+                <a href="https://github.com/Averyy/jlcpcb-mcp" target="_blank" class="nav-github"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <div class="container">
+                <div class="status-badge" id="status-badge">
+                    <span class="icon">&#10033;</span>
+                    <span id="status-text">Checking status...</span>
+                </div>
+
+                <h1>Search JLCPCB components<br>directly in Claude</h1>
+
+                <p class="hero-subtitle">
+                    Search 1.5M+ JLCPCB electronic components via MCP. Real-time stock, pricing tiers, datasheets. No API key required.
+                </p>
+
+                <div class="hero-cta">
+                    <div class="btn-code" onclick="copyInstall()" style="cursor: pointer;" title="Click to copy">
+                        <span class="code-cli">claude</span> <span class="code-cmd">mcp add</span> <span class="code-flag">--transport</span> <span class="code-arg">http</span> <span class="code-name">jlcmcp</span> <span class="code-url">https://jlcmcp.dev/mcp</span>
+                    </div>
+                    <button class="btn-primary" onclick="copyInstall()"><span class="btn-text-full">Copy to Clipboard</span><span class="btn-text-short">Copy</span></button>
+                </div>
+
+                <p class="hero-link">Or see <a href="#setup">other install methods</a> for Cursor, Claude Desktop & more</p>
+
+                <div class="terminal-section">
+                    <div class="terminal-wrapper">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                        </div>
+                        <div class="terminal-body" id="terminal-body"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <section id="setup" class="setup-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Connect your client</h2>
+                </div>
+
+                <div class="tabs-wrapper">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="claude-code">Claude Code</button>
+                        <button class="tab" data-tab="claude-desktop">Claude Desktop</button>
+                        <button class="tab" data-tab="cursor">Cursor</button>
+                        <button class="tab" data-tab="vscode">VSCode</button>
+                        <button class="tab" data-tab="copilot-xcode">Copilot for Xcode</button>
+                    </div>
+                </div>
+
+                <div id="claude-code" class="tab-content active">
+                    <div class="code-block" style="margin-bottom: 16px;">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">Project scope</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>claude mcp add --transport http jlcmcp https://jlcmcp.dev/mcp</pre>
+                        </div>
+                    </div>
+                    <div class="code-block" style="margin-bottom: 16px;">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">User scope (all projects)</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>claude mcp add -s user --transport http jlcmcp https://jlcmcp.dev/mcp</pre>
+                        </div>
+                    </div>
+                    <div class="code-block">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">Allow all tools (optional) — add to ~/.claude/settings.json</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>"mcp__jlcmcp__search_parts",
+"mcp__jlcmcp__get_part",
+"mcp__jlcmcp__list_categories",
+"mcp__jlcmcp__get_subcategories",
+"mcp__jlcmcp__get_version"</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="claude-desktop" class="tab-content">
+                    <div class="code-block">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">~/Library/Application Support/Claude/claude_desktop_config.json</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"jlcmcp"</span>: {
+      <span class="string">"type"</span>: <span class="string">"http"</span>,
+      <span class="string">"url"</span>: <span class="string">"https://jlcmcp.dev/mcp"</span>
+    }
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cursor" class="tab-content">
+                    <div class="code-block">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">~/.cursor/mcp.json</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"jlcmcp"</span>: {
+      <span class="string">"type"</span>: <span class="string">"http"</span>,
+      <span class="string">"url"</span>: <span class="string">"https://jlcmcp.dev/mcp"</span>
+    }
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="vscode" class="tab-content">
+                    <div class="code-block">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">.vscode/mcp.json</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>{
+  <span class="string">"servers"</span>: {
+    <span class="string">"jlcmcp"</span>: {
+      <span class="string">"type"</span>: <span class="string">"http"</span>,
+      <span class="string">"url"</span>: <span class="string">"https://jlcmcp.dev/mcp"</span>
+    }
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="copilot-xcode" class="tab-content">
+                    <div class="code-block">
+                        <div class="terminal-accent">
+                            <div class="terminal-dots">
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                                <div class="terminal-dot"></div>
+                            </div>
+                            <span class="terminal-title">Copilot for Xcode → Extensions</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                        </div>
+                        <div class="code-body">
+                            <pre>{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"jlcmcp"</span>: {
+      <span class="string">"command"</span>: <span class="string">"npx"</span>,
+      <span class="string">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"mcp-remote"</span>, <span class="string">"https://jlcmcp.dev/mcp"</span>]
+    }
+  }
+}</pre>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section id="features">
+            <div class="container">
+                <div class="section-header">
+                    <h2>JLCPCB MCP Features</h2>
+                    <p>Use your LLM to help you find the exact components you are looking for with ease.</p>
+                </div>
+
+                <div class="bento-grid">
+                    <div class="bento-card bento-large">
+                        <div class="icon-wrapper"><span class="icon">🛠️</span></div>
+                        <h3>5 MCP Tools</h3>
+                        <div class="tools-list">
+                            <div class="tool-item"><code>search_parts</code> <span>Search with stock, package, manufacturer filters</span></div>
+                            <div class="tool-item"><code>get_part</code> <span>Full details with pricing tiers and datasheets</span></div>
+                            <div class="tool-item"><code>list_categories</code> <span>Browse all 52 component categories</span></div>
+                            <div class="tool-item"><code>get_subcategories</code> <span>Drill into subcategories for precise discovery</span></div>
+                            <div class="tool-item"><code>get_version</code> <span>Server health and version info</span></div>
+                        </div>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="icon-wrapper"><span class="icon">⚡</span></div>
+                        <h3>Smart Filters</h3>
+                        <p>Package, manufacturer, category, library type.</p>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="icon-wrapper"><span class="icon">💰</span></div>
+                        <h3>Pricing Tiers</h3>
+                        <p>All pricing and quantity tiers from 1pc to 10,000+.</p>
+                    </div>
+
+                    <div class="bento-card bento-wide">
+                        <div class="icon-wrapper"><span class="icon">📦</span></div>
+                        <h3>1.5M+ Parts</h3>
+                        <p>Full JLCPCB catalog with real-time stock. Capacitors, resistors, MCUs, connectors, ICs, and more across 52 categories.</p>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="icon-wrapper"><span class="icon">📄</span></div>
+                        <h3>Datasheets</h3>
+                        <p>Direct PDF links included.</p>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="icon-wrapper"><span class="icon">🔗</span></div>
+                        <h3>BOM Ready</h3>
+                        <p>LCSC codes in every result.</p>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="icon-wrapper"><span class="icon">🏷️</span></div>
+                        <h3>Library Types</h3>
+                        <p>Basic, preferred, extended.</p>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="icon-wrapper"><span class="icon">🚀</span></div>
+                        <h3>No Auth</h3>
+                        <p>No API key or login needed.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-legal">
+                <div class="footer-top">
+                    <div class="footer-brand">
+                        <img src="favicon.svg" alt="">
+                        <span><span class="logo-jlcpcb">JLCPCB</span><span class="logo-mcp">MCP</span></span>
+                    </div>
+                    <div class="footer-contact">
+                        <a href="mailto:info@jlcmcp.dev">info@jlcmcp.dev</a>
+                    </div>
+                </div>
+                <p>© <span id="current-year"></span> JLCPCB MCP. An independent project not affiliated with, endorsed by, or sponsored by JLCPCB or LCSC Electronics.</p>
+                <p>JLCPCB, LCSC, and related product names are trademarks of their respective owners. All component data is sourced from JLCPCB's publicly available parts library and remains the intellectual property of JLCPCB.</p>
+                <p>This service provides search functionality over publicly available component data for development purposes. For official parts information, visit <a href="https://jlcpcb.com/parts" target="_blank">jlcpcb.com/parts</a>.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Copy code blocks
+        function copyCode(btn) {
+            const code = btn.closest('.code-block').querySelector('pre').textContent;
+            navigator.clipboard.writeText(code);
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 2000);
+        }
+
+        // Copy install command
+        function copyInstall() {
+            const text = 'claude mcp add --transport http jlcmcp https://jlcmcp.dev/mcp';
+            navigator.clipboard.writeText(text);
+            const btn = document.querySelector('.hero-cta .btn-primary');
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy to Clipboard', 2000);
+        }
+
+        // Terminal animation
+        const terminalLines = [
+            { type: 'command', text: 'claude "Find ESP32 modules with >1000 stock"', hasPrompt: true },
+            { type: 'output', text: '' },
+            { type: 'output', text: 'Searching JLCPCB components...', hasSpinner: true },
+            { type: 'output', text: '' },
+            { type: 'success', text: '⏺ Found 47 components matching criteria' },
+            { type: 'output', text: '' },
+            { type: 'result', text: '  C3006824  ESP32-S3-WROOM-1-N8    $2.89   12,450 in stock' },
+            { type: 'result', text: '  C2913202  ESP32-WROOM-32E-N4     $2.45   28,320 in stock' },
+            { type: 'result', text: '  C7013410  ESP32-S2-SOLO-N4       $1.98    5,890 in stock' },
+            { type: 'result', text: '  C2838502  ESP32-C3-WROOM-02-N4   $1.76    8,240 in stock' },
+            { type: 'result', text: '  C5765158  ESP32-S3-MINI-1-N8     $2.12   15,670 in stock' },
+            { type: 'result', text: '  C2934560  ESP32-WROVER-E-N16R8   $3.45    3,120 in stock' },
+            { type: 'result', text: '  C2490092  ESP32-C6-WROOM-1-N8    $2.34    9,780 in stock' },
+        ];
+
+        const terminalBody = document.getElementById('terminal-body');
+        let lineIndex = 0;
+
+        function typeTerminal() {
+            if (lineIndex >= terminalLines.length) {
+                // Fade out lines then restart
+                setTimeout(() => {
+                    const lines = terminalBody.querySelectorAll('.terminal-line');
+                    lines.forEach(line => {
+                        line.style.transition = 'opacity 0.25s ease-out';
+                        line.style.opacity = '0';
+                    });
+                    setTimeout(() => {
+                        terminalBody.innerHTML = '';
+                        lineIndex = 0;
+                        setTimeout(typeTerminal, 150);
+                    }, 300);
+                }, 1800);
+                return;
+            }
+
+            const line = terminalLines[lineIndex];
+            const div = document.createElement('div');
+            div.className = `terminal-line terminal-${line.type}`;
+
+            if (line.hasPrompt) {
+                const dollar = document.createElement('span');
+                dollar.className = 'terminal-dollar';
+                dollar.textContent = '$ ';
+                div.appendChild(dollar);
+                div.appendChild(document.createTextNode(line.text));
+            } else if (line.hasSpinner) {
+                const spinner = document.createElement('span');
+                spinner.className = 'terminal-spinner';
+                div.appendChild(spinner);
+                div.appendChild(document.createTextNode(line.text));
+            } else {
+                div.textContent = line.text;
+            }
+
+            terminalBody.appendChild(div);
+
+            lineIndex++;
+
+            const delay = line.text === '' ? 100 : (line.type === 'command' ? 600 : 250);
+            setTimeout(typeTerminal, delay);
+        }
+
+        setTimeout(typeTerminal, 800);
+
+        // Health check
+        async function checkHealth() {
+            const badge = document.getElementById('status-badge');
+            const text = document.getElementById('status-text');
+            try {
+                const res = await fetch('https://jlcmcp.dev/health');
+                const data = await res.json();
+                if (data.status === 'healthy') {
+                    text.textContent = 'Server Online';
+                    badge.style.borderColor = '#22c55e';
+                    badge.querySelector('.icon').style.color = '#22c55e';
+                } else {
+                    text.textContent = 'Degraded';
+                    badge.style.borderColor = '#f59e0b';
+                }
+            } catch (e) {
+                text.textContent = 'Checking...';
+            }
+        }
+        checkHealth();
+
+        // Set current year
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // Animated gradient orbs parallax - diagonal movement + scale
+        const orbs = document.querySelectorAll('.gradient-orb');
+        const orbMotion = [
+            { y: 0.25, x: 0.12, scale: 0.00015 },   // grows
+            { y: 0.18, x: -0.15, scale: -0.0001 },  // shrinks
+            { y: 0.30, x: 0.08, scale: 0.00012 },   // grows
+            { y: 0.12, x: -0.10, scale: -0.00008 }, // shrinks
+            { y: 0.22, x: 0.06, scale: 0.0001 }     // grows
+        ];
+        let ticking = false;
+        window.addEventListener('scroll', () => {
+            if (!ticking) {
+                requestAnimationFrame(() => {
+                    const scrollY = window.scrollY;
+                    orbs.forEach((orb, i) => {
+                        const m = orbMotion[i];
+                        const x = scrollY * m.x;
+                        const y = scrollY * m.y;
+                        const s = 1 + (scrollY * m.scale);
+                        orb.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+                    });
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        });
+    </script>
+</body>
+</html>

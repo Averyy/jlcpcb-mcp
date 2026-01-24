@@ -1,0 +1,33 @@
+services:
+  jlcpcb-mcp:
+    build: .
+    container_name: jlcpcb-mcp
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - HTTP_PORT=8080
+      - RATE_LIMIT_REQUESTS=100
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - web
+
+networks:
+  web:
+    external: true

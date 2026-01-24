@@ -1,0 +1,132 @@
+# Claude Guidelines
+
+## Before Starting Work
+
+**Always run `git pull` first** - Your local repo may be out of date.
+
+## Git Commit Rules
+
+**NEVER commit without explicit written permission** - Only commit when the user explicitly asks with phrases like "commit this", "push these changes", or "git commit". Never assume permission to commit.
+
+**NEVER add Claude attribution to commits** - Do not include "Co-Authored-By: Claude" or any other attribution.
+
+## Project Overview
+
+MCP server for searching JLCPCB electronic components for PCB assembly. Searches 1.5M+ parts across 52 categories with real-time stock and pricing.
+
+**Website:** https://jlcmcp.dev
+**MCP Endpoint:** https://jlcmcp.dev/mcp
+**Health Check:** https://jlcmcp.dev/health
+
+## Critical Rules
+
+- **NEVER create mock data** unless explicitly told to
+- **NEVER replace existing code with simplified versions** - fix the actual problem
+- **ALWAYS find root cause** - don't create workarounds
+- Update existing files, don't create new ones unless necessary
+
+## API Notes
+
+**IMPORTANT:** The JLCPCB API has quirky field names:
+- `firstSortName` = **subcategory** (not first/primary)
+- `secondSortName` = **category** (the primary category)
+
+This is counterintuitive but verified through testing. The client handles this mapping correctly.
+
+**TLS Fingerprinting:** JLCPCB uses TLS fingerprint detection. We use `curl_cffi` for browser impersonation (Chrome 131/133/136/142) to avoid rate limiting. Regular HTTP clients like `httpx` or `requests` get 403 errors after several rapid requests.
+
+## Python Environment
+
+Python is managed via **uv**.
+
+```bash
+# Create venv and install dependencies
+uv venv
+uv pip install -e ".[dev]"
+```
+
+## Running Tests
+
+```bash
+# Run all tests
+.venv/bin/pytest tests/ -v
+
+# Run unit tests only (no API calls)
+.venv/bin/pytest tests/ -v -k "not Integration"
+
+# Run integration tests (hits real API)
+.venv/bin/pytest tests/ -v -k "Integration"
+```
+
+## Docker Deployment
+
+```bash
+# Build and run
+docker compose up -d
+
+# View logs
+docker logs jlcpcb-mcp -f
+
+# Test health
+curl https://jlcmcp.dev/health
+```
+
+## Architecture
+
+```
+jlcpcb-mcp/
+├── src/jlcpcb_mcp/
+│   ├── __init__.py         # Version
+│   ├── config.py           # Configuration, headers
+│   ├── client.py           # JLCPCB API client (curl_cffi)
+│   ├── server.py           # FastMCP server
+│   └── categories.py       # 52 categories + subcategories
+├── landing/                # Website at jlcmcp.dev
+│   └── index.html
+├── tests/
+│   └── test_client.py      # Unit + integration tests
+├── Dockerfile
+├── docker-compose.yml
+└── pyproject.toml
+```
+
+## Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `search_parts` | Search components by keyword, category, filters |
+| `get_part` | Get full details for a specific LCSC part code |
+| `list_categories` | Get all 52 primary component categories |
+| `get_subcategories` | Get subcategories for a category |
+| `get_version` | Get server version and health status |
+
+## Library Types
+
+JLCPCB has three library types that affect assembly fees:
+
+- **basic**: No extra fee - common parts in JLCPCB's standard library
+- **preferred**: No extra fee - recommended parts with good availability
+- **extended**: $3 per unique part - less common parts
+
+Use `library_type="no_fee"` to search both basic and preferred parts (merged results).
+
+## Common Development Tasks
+
+```bash
+# Reinstall package after code changes
+uv pip install -e ".[dev]"
+
+# Quick API test
+.venv/bin/python -c "
+import asyncio
+from jlcpcb_mcp.client import JLCPCBClient
+
+async def test():
+    client = JLCPCBClient()
+    result = await client.search(query='ESP32', limit=3)
+    print(f'{result[\"total\"]} results')
+    await client.close()
+
+asyncio.run(test())
+"
+```
