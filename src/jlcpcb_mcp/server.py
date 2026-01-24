@@ -4,7 +4,7 @@ import logging
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 from mcp.types import Icon, ToolAnnotations
@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from . import __version__
-from .config import RATE_LIMIT_REQUESTS, HTTP_PORT, DEFAULT_MIN_STOCK
+from .config import RATE_LIMIT_REQUESTS, HTTP_PORT, DEFAULT_MIN_STOCK, MAX_PAGE_SIZE
 from .client import JLCPCBClient
 
 logger = logging.getLogger(__name__)
@@ -125,19 +125,27 @@ async def search_parts(
     library_type: str | None = None,
     package: str | None = None,
     manufacturer: str | None = None,
+    packages: list[str] | None = None,
+    manufacturers: list[str] | None = None,
+    sort_by: Literal["quantity", "price"] | None = None,
     page: int = 1,
     limit: int = 20,
 ) -> dict:
     """Search JLCPCB components for PCB assembly.
 
     Args:
-        query: Keyword, part number, or category name (e.g., "ESP32", "capacitor", "LED")
+        query: Search keywords including part numbers, model names, or attribute values
+               (e.g., "ESP32", "10uF 25V", "STM32F103"). Attribute values like capacitance,
+               voltage rating, resistance work as search terms.
         category_id: Category ID from list_categories (e.g., 1=Resistors, 2=Capacitors)
         subcategory_id: Subcategory ID from get_subcategories
         min_stock: Min stock qty (default 50). Set 0 for all including out-of-stock
         library_type: "basic", "preferred", "no_fee" (both), "extended" ($3/part), or "all"
-        package: Package size (e.g., "0402", "0603", "LQFP48")
-        manufacturer: Exact name, case-sensitive (e.g., "Texas Instruments" not "TI")
+        package: Single package size filter (e.g., "0402", "LQFP48")
+        manufacturer: Single manufacturer filter, case-sensitive (e.g., "Texas Instruments")
+        packages: Multiple package sizes (OR filter). E.g., ["0402", "0603", "0805"]
+        manufacturers: Multiple manufacturers (OR filter). E.g., ["TI", "STMicroelectronics"]
+        sort_by: "quantity" (highest first) or "price" (cheapest first). Default: relevance
         page: Page number (default: 1)
         limit: Results per page (default: 20, max: 100)
 
@@ -148,8 +156,8 @@ async def search_parts(
     if not _client:
         raise RuntimeError("Client not initialized")
 
-    # Enforce valid limit range (1-100)
-    effective_limit = max(1, min(limit, 100))
+    # Enforce valid limit range (1 to MAX_PAGE_SIZE)
+    effective_limit = max(1, min(limit, MAX_PAGE_SIZE))
 
     return await _client.search(
         query=query,
@@ -159,6 +167,9 @@ async def search_parts(
         library_type=library_type if library_type != "all" else None,
         package=package,
         manufacturer=manufacturer,
+        packages=packages,
+        manufacturers=manufacturers,
+        sort_by=sort_by,
         page=page,
         limit=effective_limit,
     )

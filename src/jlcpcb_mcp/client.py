@@ -2,7 +2,7 @@
 
 import asyncio
 import random
-from typing import Any
+from typing import Any, Literal
 
 from curl_cffi import requests as curl_requests
 
@@ -118,6 +118,12 @@ class JLCPCBClient:
         "fets": "Transistors",
     }
 
+    # Sort mode mapping: user-friendly name -> API value
+    _SORT_MODE_MAP: dict[str, str] = {
+        "quantity": "STOCK_SORT",
+        "price": "PRICE_SORT",
+    }
+
     def _resolve_abbreviation(self, abbrev: str) -> int | None:
         """Resolve an abbreviation to a category ID using the live category cache."""
         category_name = self._ABBREVIATION_TO_CATEGORY.get(abbrev)
@@ -205,6 +211,9 @@ class JLCPCBClient:
         library_type: str | None = None,
         package: str | None = None,
         manufacturer: str | None = None,
+        packages: list[str] | None = None,
+        manufacturers: list[str] | None = None,
+        sort_by: Literal["quantity", "price"] | None = None,
         page: int = 1,
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> dict[str, Any]:
@@ -216,6 +225,11 @@ class JLCPCBClient:
             "pageSize": effective_limit,
             "searchSource": "search",
         }
+
+        # Sorting: quantity (highest first), price (cheapest first)
+        if sort_by and sort_by in self._SORT_MODE_MAP:
+            params["sortMode"] = self._SORT_MODE_MAP[sort_by]
+            params["sortASC"] = "ASC" if sort_by == "price" else "DESC"
 
         # Keyword search
         if query:
@@ -261,12 +275,18 @@ class JLCPCBClient:
                 params["componentLibraryType"] = "base"
                 params["preferredComponentFlag"] = True
 
-        # Package filtering
-        if package:
+        # Package filtering (single or multi-select)
+        if packages:
+            # Multi-select: OR filter across multiple packages
+            params["componentSpecificationList"] = packages
+        elif package:
             params["componentSpecification"] = package
 
-        # Manufacturer filtering
-        if manufacturer:
+        # Manufacturer filtering (single or multi-select)
+        if manufacturers:
+            # Multi-select: OR filter across multiple manufacturers
+            params["componentBrandList"] = manufacturers
+        elif manufacturer:
             params["componentBrand"] = manufacturer
 
         return params
@@ -341,6 +361,9 @@ class JLCPCBClient:
         library_type: str | None = None,
         package: str | None = None,
         manufacturer: str | None = None,
+        packages: list[str] | None = None,
+        manufacturers: list[str] | None = None,
+        sort_by: Literal["quantity", "price"] | None = None,
         page: int = 1,
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> dict[str, Any]:
@@ -367,6 +390,9 @@ class JLCPCBClient:
             library_type=library_type,
             package=package,
             manufacturer=manufacturer,
+            packages=packages,
+            manufacturers=manufacturers,
+            sort_by=sort_by,
             page=page,
             limit=limit,
         )

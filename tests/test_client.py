@@ -89,6 +89,66 @@ class TestClient:
         assert params["componentLibraryType"] == "base"
         assert params["preferredComponentFlag"] is True
 
+    def test_build_search_params_sort_by_quantity(self, client):
+        """Sort by quantity (highest first)."""
+        params = client._build_search_params(sort_by="quantity")
+        assert params["sortMode"] == "STOCK_SORT"
+        assert params["sortASC"] == "DESC"
+
+    def test_build_search_params_sort_by_price(self, client):
+        """Sort by price (cheapest first)."""
+        params = client._build_search_params(sort_by="price")
+        assert params["sortMode"] == "PRICE_SORT"
+        assert params["sortASC"] == "ASC"
+
+    def test_build_search_params_sort_default(self, client):
+        """No sorting params when sort_by is None (default relevance)."""
+        params = client._build_search_params(query="ESP32")
+        assert "sortMode" not in params
+        assert "sortASC" not in params
+
+    def test_build_search_params_sort_invalid(self, client):
+        """Invalid sort_by value is ignored."""
+        params = client._build_search_params(sort_by="invalid")
+        assert "sortMode" not in params
+        assert "sortASC" not in params
+
+    def test_build_search_params_packages_multi(self, client):
+        """Multiple packages use componentSpecificationList (OR filter)."""
+        params = client._build_search_params(packages=["0402", "0603", "0805"])
+        assert params["componentSpecificationList"] == ["0402", "0603", "0805"]
+        assert "componentSpecification" not in params
+
+    def test_build_search_params_packages_empty(self, client):
+        """Empty packages list is ignored."""
+        params = client._build_search_params(packages=[])
+        assert "componentSpecificationList" not in params
+        assert "componentSpecification" not in params
+
+    def test_build_search_params_package_single_over_multi(self, client):
+        """Multi-select packages takes precedence over single package."""
+        params = client._build_search_params(package="0402", packages=["0603", "0805"])
+        assert params["componentSpecificationList"] == ["0603", "0805"]
+        assert "componentSpecification" not in params
+
+    def test_build_search_params_manufacturers_multi(self, client):
+        """Multiple manufacturers use componentBrandList (OR filter)."""
+        params = client._build_search_params(manufacturers=["TI", "STMicroelectronics"])
+        assert params["componentBrandList"] == ["TI", "STMicroelectronics"]
+        assert "componentBrand" not in params
+
+    def test_build_search_params_manufacturers_empty(self, client):
+        """Empty manufacturers list is ignored."""
+        params = client._build_search_params(manufacturers=[])
+        assert "componentBrandList" not in params
+        assert "componentBrand" not in params
+
+    def test_build_search_params_manufacturer_single_over_multi(self, client):
+        """Multi-select manufacturers takes precedence over single manufacturer."""
+        params = client._build_search_params(manufacturer="TI", manufacturers=["STM", "NXP"])
+        assert params["componentBrandList"] == ["STM", "NXP"]
+        assert "componentBrand" not in params
+
     def test_transform_part_slim(self, client):
         # Note: API returns firstSortName as subcategory, secondSortName as category
         item = {
@@ -273,3 +333,77 @@ class TestClientIntegration:
             f"Expected at least 680 subcategories, got {total_subs}. "
             "JLCPCB API may have changed or is returning incomplete data."
         )
+
+    async def test_search_sort_by_quantity(self, client):
+        """Test sorting by quantity (highest first)."""
+        result = await client.search(query="ESP32", sort_by="quantity", limit=10)
+        stocks = [r["stock"] for r in result["results"] if r["stock"] is not None]
+        # Check descending order (each value >= next)
+        for i in range(len(stocks) - 1):
+            assert stocks[i] >= stocks[i + 1], "Results should be sorted by quantity descending"
+
+    async def test_search_sort_by_price(self, client):
+        """Test sorting by price (cheapest first)."""
+        result = await client.search(query="ESP32", sort_by="price", limit=10)
+        prices = [r["price"] for r in result["results"] if r["price"] is not None]
+        # Check ascending order (each value <= next)
+        for i in range(len(prices) - 1):
+            assert prices[i] <= prices[i + 1], "Results should be sorted by price ascending"
+
+    async def test_search_packages_multi(self, client):
+        """Test multi-select package filter (OR logic)."""
+        # Search capacitors with multiple package sizes
+        result = await client.search(
+            category_id=2,  # Capacitors
+            packages=["0402", "0603", "0805"],
+            limit=20,
+        )
+        # Collect packages from results
+        result_packages = {r["package"] for r in result["results"]}
+        # Should include at least some of the requested packages
+        assert result_packages & {"0402", "0603", "0805"}, (
+            f"Expected some of ['0402', '0603', '0805'], got {result_packages}"
+        )
+
+    async def test_search_manufacturers_multi(self, client):
+        """Test multi-select manufacturer filter (OR logic)."""
+        result = await client.search(
+            query="microcontroller",
+            manufacturers=["STMicroelectronics", "Microchip Tech"],
+            limit=20,
+        )
+        # Collect manufacturers from results
+        result_mfrs = {r["manufacturer"] for r in result["results"]}
+        # Should include at least one of the requested manufacturers
+        assert result_mfrs & {"STMicroelectronics", "Microchip Tech"}, (
+            f"Expected some of ['STMicroelectronics', 'Microchip Tech'], got {result_mfrs}"
+        )
+
+    async def test_search_combined_filters(self, client):
+        """Test combining keyword, category, multi-package, and stock filters."""
+        result = await client.search(
+            query="100nF",  # Attribute value as keyword
+            category_id=2,  # Capacitors
+            packages=["0402", "0603"],
+            min_stock=1000,
+            limit=10,
+        )
+        assert len(result["results"]) > 0, "Should find 100nF capacitors"
+        # Verify all results meet stock requirement
+        for part in result["results"]:
+            assert part["stock"] >= 1000, f"Part {part['lcsc']} has stock {part['stock']} < 1000"
+
+    async def test_search_sorted_with_multi_filters(self, client):
+        """Test sorting combined with multi-select filters."""
+        result = await client.search(
+            category_id=2,  # Capacitors
+            packages=["0402", "0603"],
+            sort_by="price",
+            min_stock=100,
+            limit=10,
+        )
+        assert len(result["results"]) > 0, "Should find capacitors"
+        # Verify price sorting (ascending)
+        prices = [r["price"] for r in result["results"] if r["price"] is not None]
+        for i in range(len(prices) - 1):
+            assert prices[i] <= prices[i + 1], "Results should be sorted by price ascending"

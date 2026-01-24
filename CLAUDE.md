@@ -94,11 +94,21 @@ jlcpcb-mcp/
 
 | Tool | Description |
 |------|-------------|
-| `search_parts` | Search components by keyword, category, filters |
+| `search_parts` | Search components by keyword, category, filters, sorting |
 | `get_part` | Get full details for a specific LCSC part code |
 | `list_categories` | Get all 52 primary component categories |
 | `get_subcategories` | Get subcategories for a category |
 | `get_version` | Get server version and health status |
+
+### search_parts Filters
+
+- **query**: Keywords including attribute values (e.g., "10uF 25V", "100k 1%")
+- **package/packages**: Single or multiple package sizes (OR logic for arrays)
+- **manufacturer/manufacturers**: Single or multiple manufacturers (OR logic for arrays)
+- **category_id/subcategory_id**: Filter by category from `list_categories`
+- **library_type**: "basic", "preferred", "no_fee", "extended", or "all"
+- **min_stock**: Minimum stock quantity (default: 50)
+- **sort_by**: "quantity" (highest first) or "price" (cheapest first). Default: relevance
 
 ## Library Types
 

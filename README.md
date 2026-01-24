@@ -7,6 +7,8 @@ MCP server for searching JLCPCB electronic components directly from Claude, Curs
 ## Features
 
 - Search 1.5M+ JLCPCB components by keyword, category, stock, package, manufacturer
+- **Multi-select filters:** Search multiple packages or manufacturers at once (OR logic)
+- **Attribute search:** Find parts by specs like capacitance, voltage, resistance via keywords
 - Filter by library type (basic/preferred = no fee, extended = $3 fee)
 - Get detailed part info including pricing tiers and datasheets
 - Browse 52 component categories and subcategories
@@ -83,21 +85,38 @@ Add to `.vscode/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `search_parts` | Search JLCPCB components by keyword, category, stock, package, manufacturer |
+| `search_parts` | Search components with filters for category, stock, package(s), manufacturer(s), library type |
 | `get_part` | Get full details for a specific LCSC part code |
 | `list_categories` | Get all 52 primary component categories |
 | `get_subcategories` | Get subcategories for a category |
 | `get_version` | Server version and health status |
 
+### search_parts Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | string | Keywords, part numbers, or attribute values (e.g., "10uF 25V", "STM32F103") |
+| `category_id` | int | Category ID from `list_categories` |
+| `subcategory_id` | int | Subcategory ID from `get_subcategories` |
+| `min_stock` | int | Minimum stock (default: 50, set 0 for all) |
+| `library_type` | string | "basic", "preferred", "no_fee", "extended", or "all" |
+| `package` | string | Single package filter (e.g., "0402") |
+| `packages` | string[] | Multiple packages, OR logic (e.g., ["0402", "0603", "0805"]) |
+| `manufacturer` | string | Single manufacturer filter |
+| `manufacturers` | string[] | Multiple manufacturers, OR logic |
+| `sort_by` | string | "quantity" (highest first) or "price" (cheapest first) |
+| `page` | int | Page number (default: 1) |
+| `limit` | int | Results per page (default: 20, max: 100) |
+
 ## Example Prompts
 
 ```
-"Search for 0402 100nF capacitors with at least 1000 in stock"
+"Search for 100nF 25V capacitors in 0402 or 0603 packages"
 "Find ESP32 modules in the basic library" (no assembly fee)
 "Get details for part C82899"
+"Search for 10k resistors from Yageo or UniOhm"
+"Find STM32 or CH32 microcontrollers with 10000+ stock"
 "List all JLCPCB component categories"
-"Search for STM32 microcontrollers"
-"Find USB-C connectors with stock over 5000"
 ```
 
 ## JLCPCB Library Types
@@ -111,6 +130,14 @@ JLCPCB has three library types that affect PCB assembly fees:
 | `extended` | $3/unique | Less common parts |
 
 Use `library_type="no_fee"` to search both basic and preferred parts combined.
+
+## Search Tips
+
+- **Attribute Search:** Include specs in your query like "10uF 25V" or "100k 1%" - these search against component attributes
+- **Multi-Select:** Use `packages` or `manufacturers` arrays to search multiple values with OR logic
+- **Min Stock:** Results filtered to 50+ units by default. Set `min_stock=0` to include all parts
+- **Category Matching:** Single-word queries like "capacitor", "LED", "ESD" auto-match to categories
+- **Sorting:** Use `sort_by="quantity"` for highest stock, or `sort_by="price"` for cheapest first
 
 ## API Details
 
