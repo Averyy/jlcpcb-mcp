@@ -104,6 +104,31 @@ class JLCPCBClient:
         """Get subcategory by ID from cache. Returns (parent_id, subcategory) or None."""
         return self._subcategory_map.get(subcategory_id)
 
+    def _match_category_by_name(self, query: str) -> int | None:
+        """Match a query string against category names.
+
+        Returns category_id if query matches a category name (case-insensitive).
+        Handles common variations like singular/plural ("capacitor" -> "Capacitors").
+        """
+        if not query or not self._categories:
+            return None
+
+        query_lower = query.lower().strip()
+
+        for cat in self._categories:
+            cat_name = cat["name"].lower()
+            # Exact match
+            if query_lower == cat_name:
+                return cat["id"]
+            # Query is singular form of category (e.g., "capacitor" matches "capacitors")
+            if cat_name.endswith("s") and query_lower == cat_name[:-1]:
+                return cat["id"]
+            # Query matches start of category name (e.g., "resistor" matches "resistors")
+            if cat_name.startswith(query_lower) and len(query_lower) >= 4:
+                return cat["id"]
+
+        return None
+
     async def _request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         """Execute request with retry logic and browser impersonation."""
         session = await self._get_session()
@@ -151,9 +176,11 @@ class JLCPCBClient:
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> dict[str, Any]:
         """Build search request parameters."""
+        # Enforce valid limit range (1 to MAX_PAGE_SIZE)
+        effective_limit = max(1, min(limit, MAX_PAGE_SIZE))
         params: dict[str, Any] = {
             "currentPage": page,
-            "pageSize": min(limit, MAX_PAGE_SIZE),
+            "pageSize": effective_limit,
             "searchSource": "search",
         }
 
@@ -285,9 +312,18 @@ class JLCPCBClient:
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> dict[str, Any]:
         """Search for components."""
-        # Load categories if filtering by category/subcategory
-        if category_id or subcategory_id:
+        # Load categories if filtering by category/subcategory, or if we have a query
+        # that might match a category name
+        if category_id or subcategory_id or query:
             await self._ensure_categories()
+
+        # Auto-match query to category if no category specified
+        # e.g., "capacitor" -> category_id=2 (Capacitors)
+        if query and not category_id and not subcategory_id:
+            matched_category = self._match_category_by_name(query)
+            if matched_category:
+                category_id = matched_category
+                query = None  # Use category filter instead of keyword
 
         # Build and execute search
         params = self._build_search_params(

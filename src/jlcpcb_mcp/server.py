@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastmcp import FastMCP
-from mcp.types import ToolAnnotations
+from mcp.types import Icon, ToolAnnotations
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -50,6 +50,10 @@ mcp = FastMCP(
     name="jlcmcp",
     instructions="JLCPCB component search for PCB assembly. No auth required. Use search_parts to find components, get_part for details.",
     lifespan=lifespan,
+    icons=[
+        Icon(src="https://jlcmcp.dev/favicon.svg", mimeType="image/svg+xml"),
+        Icon(src="https://jlcmcp.dev/favicon-96x96.png", mimeType="image/png", sizes=["96x96"]),
+    ],
 )
 
 
@@ -123,7 +127,7 @@ async def search_parts(
         min_stock: Minimum stock quantity (default: 100). Set to 0 to include out-of-stock.
         library_type: Filter by fee type - "basic" (no fee), "preferred" (no fee), "no_fee" (basic+preferred), "extended" ($3 fee), or "all"
         package: Filter by package size (e.g., "0402", "0603", "LQFP48")
-        manufacturer: Filter by manufacturer (e.g., "STMicroelectronics")
+        manufacturer: Filter by manufacturer. IMPORTANT: Must be exact match and case-sensitive (e.g., "STMicroelectronics" not "stmicroelectronics" or "STM")
         page: Page number for pagination (default: 1)
         limit: Results per page (default: 20, max: 100)
 
@@ -134,6 +138,9 @@ async def search_parts(
     if not _client:
         raise RuntimeError("Client not initialized")
 
+    # Enforce valid limit range (1-100)
+    effective_limit = max(1, min(limit, 100))
+
     return await _client.search(
         query=query,
         category_id=category_id,
@@ -143,7 +150,7 @@ async def search_parts(
         package=package,
         manufacturer=manufacturer,
         page=page,
-        limit=min(limit, 100),
+        limit=effective_limit,
     )
 
 
