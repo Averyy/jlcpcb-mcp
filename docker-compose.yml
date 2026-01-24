@@ -1,10 +1,16 @@
 services:
   jlcpcb-mcp:
-    build: .
+    # Use GHCR image in production, or build locally with: docker compose build
+    image: ghcr.io/averyy/jlcpcb-mcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: jlcpcb-mcp
     restart: unless-stopped
     ports:
       - "8080:8080"
+    networks:
+      - web
     environment:
       - HTTP_PORT=8080
       - RATE_LIMIT_REQUESTS=100
@@ -25,8 +31,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - web
 
 networks:
   web:
