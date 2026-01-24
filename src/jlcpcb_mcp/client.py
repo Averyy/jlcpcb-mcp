@@ -104,16 +104,49 @@ class JLCPCBClient:
         """Get subcategory by ID from cache. Returns (parent_id, subcategory) or None."""
         return self._subcategory_map.get(subcategory_id)
 
+    # Common abbreviations mapped to category name substrings
+    # These are resolved dynamically against fetched categories at runtime
+    _ABBREVIATION_TO_CATEGORY: dict[str, str] = {
+        "led": "Optoelectronics",
+        "leds": "Optoelectronics",
+        "esd": "Circuit Protection",
+        "adc": "Data Acquisition",
+        "adcs": "Data Acquisition",
+        "bjt": "Transistors",
+        "bjts": "Transistors",
+        "fet": "Transistors",
+        "fets": "Transistors",
+    }
+
+    def _resolve_abbreviation(self, abbrev: str) -> int | None:
+        """Resolve an abbreviation to a category ID using the live category cache."""
+        category_name = self._ABBREVIATION_TO_CATEGORY.get(abbrev)
+        if not category_name:
+            return None
+
+        # Find category by name (case-insensitive, partial match)
+        category_name_lower = category_name.lower()
+        for cat in self._categories:
+            if category_name_lower in cat["name"].lower():
+                return cat["id"]
+        return None
+
     def _match_category_by_name(self, query: str) -> int | None:
         """Match a query string against category names.
 
         Returns category_id if query matches a category name (case-insensitive).
-        Handles common variations like singular/plural ("capacitor" -> "Capacitors").
+        Handles common variations like singular/plural ("capacitor" -> "Capacitors"),
+        and common abbreviations like "LED" -> Optoelectronics.
         """
         if not query or not self._categories:
             return None
 
         query_lower = query.lower().strip()
+
+        # Check explicit abbreviation mappings first (resolved dynamically)
+        abbrev_match = self._resolve_abbreviation(query_lower)
+        if abbrev_match is not None:
+            return abbrev_match
 
         for cat in self._categories:
             cat_name = cat["name"].lower()

@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from . import __version__
-from .config import RATE_LIMIT_REQUESTS, HTTP_PORT
+from .config import RATE_LIMIT_REQUESTS, HTTP_PORT, DEFAULT_MIN_STOCK
 from .client import JLCPCBClient
 
 logger = logging.getLogger(__name__)
@@ -66,9 +66,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.request_counts: dict[str, list[float]] = defaultdict(list)
 
     def _get_client_ip(self, request) -> str:
+        """Extract client IP, preferring rightmost X-Forwarded-For entry.
+
+        Rightmost is harder to spoof as it's set by the last trusted proxy.
+        """
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            # Use rightmost IP (set by our reverse proxy, harder to spoof)
+            ips = [ip.strip() for ip in forwarded.split(",")]
+            return ips[-1] if ips else "unknown"
         return request.client.host if request.client else "unknown"
 
     def _check_rate_limit(self, client_ip: str) -> bool:
@@ -77,6 +83,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.request_counts[client_ip] = [
             t for t in self.request_counts[client_ip] if t > window_start
         ]
+        # Clean up empty entries to prevent unbounded memory growth
+        if not self.request_counts[client_ip]:
+            del self.request_counts[client_ip]
+            return False
         if len(self.request_counts[client_ip]) >= self.requests_per_minute:
             return True
         self.request_counts[client_ip].append(now)
@@ -111,7 +121,7 @@ async def search_parts(
     query: str | None = None,
     category_id: int | None = None,
     subcategory_id: int | None = None,
-    min_stock: int = 100,
+    min_stock: int = DEFAULT_MIN_STOCK,
     library_type: str | None = None,
     package: str | None = None,
     manufacturer: str | None = None,
@@ -121,19 +131,19 @@ async def search_parts(
     """Search JLCPCB components for PCB assembly.
 
     Args:
-        query: Search keyword (e.g., "ESP32", "100nF 0402", "STM32F103C8T6")
-        category_id: Category ID (e.g., 1=Resistors, 2=Capacitors). Use list_categories to get IDs.
-        subcategory_id: Subcategory ID (e.g., 2980=Chip Resistors). Use get_subcategories to get IDs.
-        min_stock: Minimum stock quantity (default: 100). Set to 0 to include out-of-stock.
-        library_type: Filter by fee type - "basic" (no fee), "preferred" (no fee), "no_fee" (basic+preferred), "extended" ($3 fee), or "all"
-        package: Filter by package size (e.g., "0402", "0603", "LQFP48")
-        manufacturer: Filter by manufacturer. IMPORTANT: Must be exact match and case-sensitive (e.g., "STMicroelectronics" not "stmicroelectronics" or "STM")
-        page: Page number for pagination (default: 1)
+        query: Keyword, part number, or category name (e.g., "ESP32", "capacitor", "LED")
+        category_id: Category ID from list_categories (e.g., 1=Resistors, 2=Capacitors)
+        subcategory_id: Subcategory ID from get_subcategories
+        min_stock: Min stock qty (default 50). Set 0 for all including out-of-stock
+        library_type: "basic", "preferred", "no_fee" (both), "extended" ($3/part), or "all"
+        package: Package size (e.g., "0402", "0603", "LQFP48")
+        manufacturer: Exact name, case-sensitive (e.g., "Texas Instruments" not "TI")
+        page: Page number (default: 1)
         limit: Results per page (default: 20, max: 100)
 
     Returns:
-        Search results with lcsc code, model, manufacturer, package, stock, price, library_type, category.
-        Use get_part with the lcsc code to get full details including datasheet and pricing tiers.
+        Results with lcsc, model, manufacturer, package, stock, price, library_type.
+        Use get_part(lcsc) for full details and datasheet.
     """
     if not _client:
         raise RuntimeError("Client not initialized")

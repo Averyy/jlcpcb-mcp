@@ -20,6 +20,30 @@ class TestClient:
                     {"id": 2980, "name": "Chip Resistor - Surface Mount", "count": 500000},
                 ],
             },
+            {
+                "id": 5,
+                "name": "Transistors/Thyristors",
+                "count": 110000,
+                "subcategories": [],
+            },
+            {
+                "id": 11,
+                "name": "Circuit Protection",
+                "count": 159000,
+                "subcategories": [],
+            },
+            {
+                "id": 16,
+                "name": "Optoelectronics",
+                "count": 83000,
+                "subcategories": [],
+            },
+            {
+                "id": 29,
+                "name": "Data Acquisition",
+                "count": 25000,
+                "subcategories": [],
+            },
         ])
         return client
 
@@ -124,6 +148,60 @@ class TestClient:
         assert result["prices"][0]["qty"] == "1+"
         assert len(result["attributes"]) == 1
         assert result["attributes"][0]["name"] == "Voltage"
+
+    # Tests for abbreviation matching
+
+    def test_match_category_abbreviation_led(self, client):
+        """LED abbreviation should match Optoelectronics category."""
+        assert client._match_category_by_name("led") == 16
+        assert client._match_category_by_name("LED") == 16
+        assert client._match_category_by_name("Led") == 16
+
+    def test_match_category_abbreviation_led_plural(self, client):
+        """LEDs (plural) should also match Optoelectronics."""
+        assert client._match_category_by_name("leds") == 16
+        assert client._match_category_by_name("LEDs") == 16
+
+    def test_match_category_abbreviation_esd(self, client):
+        """ESD abbreviation should match Circuit Protection category."""
+        assert client._match_category_by_name("esd") == 11
+        assert client._match_category_by_name("ESD") == 11
+
+    def test_match_category_abbreviation_adc(self, client):
+        """ADC abbreviation should match Data Acquisition category."""
+        assert client._match_category_by_name("adc") == 29
+        assert client._match_category_by_name("ADC") == 29
+        assert client._match_category_by_name("adcs") == 29
+
+    def test_match_category_abbreviation_transistors(self, client):
+        """BJT and FET abbreviations should match Transistors category."""
+        assert client._match_category_by_name("bjt") == 5
+        assert client._match_category_by_name("BJT") == 5
+        assert client._match_category_by_name("bjts") == 5
+        assert client._match_category_by_name("fet") == 5
+        assert client._match_category_by_name("FET") == 5
+        assert client._match_category_by_name("fets") == 5
+
+    def test_match_category_by_name_exact(self, client):
+        """Exact category name match."""
+        assert client._match_category_by_name("resistors") == 1
+        assert client._match_category_by_name("Resistors") == 1
+
+    def test_match_category_by_name_singular(self, client):
+        """Singular form should match plural category."""
+        assert client._match_category_by_name("resistor") == 1
+
+    def test_match_category_by_name_no_match(self, client):
+        """Non-matching query should return None."""
+        assert client._match_category_by_name("xyz123") is None
+        assert client._match_category_by_name("") is None
+        assert client._match_category_by_name(None) is None
+
+    def test_resolve_abbreviation_requires_categories(self, client):
+        """Abbreviation resolution requires categories to be loaded."""
+        empty_client = JLCPCBClient()
+        # No categories set, should return None
+        assert empty_client._match_category_by_name("led") is None
 
 
 @pytest.mark.asyncio
