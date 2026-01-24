@@ -196,6 +196,10 @@ class JLCPCBClient:
                 params["componentLibraryType"] = "expand"
             elif library_type == "preferred":
                 params["preferredComponentFlag"] = True
+            elif library_type == "no_fee":
+                # Combines basic + preferred in single API call
+                params["componentLibraryType"] = "base"
+                params["preferredComponentFlag"] = True
 
         # Package filtering
         if package:
@@ -285,61 +289,7 @@ class JLCPCBClient:
         if category_id or subcategory_id:
             await self._ensure_categories()
 
-        # Handle "no_fee" by merging basic + preferred
-        if library_type == "no_fee":
-            # Make parallel requests for basic and preferred
-            basic_params = self._build_search_params(
-                query=query,
-                category_id=category_id,
-                subcategory_id=subcategory_id,
-                min_stock=min_stock,
-                library_type="basic",
-                package=package,
-                manufacturer=manufacturer,
-                page=page,
-                limit=limit,
-            )
-            pref_params = self._build_search_params(
-                query=query,
-                category_id=category_id,
-                subcategory_id=subcategory_id,
-                min_stock=min_stock,
-                library_type="preferred",
-                package=package,
-                manufacturer=manufacturer,
-                page=page,
-                limit=limit,
-            )
-
-            basic_resp, pref_resp = await asyncio.gather(
-                self._request(JLCPCB_SEARCH_URL, basic_params),
-                self._request(JLCPCB_SEARCH_URL, pref_params),
-            )
-
-            basic_data = basic_resp.get("data", {})
-            pref_data = pref_resp.get("data", {})
-
-            basic_items = basic_data.get("componentPageInfo", {}).get("list", [])
-            pref_items = pref_data.get("componentPageInfo", {}).get("list", [])
-
-            # Merge and deduplicate
-            seen = set()
-            merged = []
-            for item in basic_items + pref_items:
-                code = item.get("componentCode")
-                if code and code not in seen:
-                    seen.add(code)
-                    merged.append(self._transform_part(item, slim=True))
-
-            return {
-                "results": merged[:limit],
-                "page": page,
-                "per_page": limit,
-                "total": len(merged),
-                "has_more": len(merged) > limit,
-            }
-
-        # Standard search
+        # Build and execute search
         params = self._build_search_params(
             query=query,
             category_id=category_id,
@@ -371,6 +321,9 @@ class JLCPCBClient:
 
     async def get_part(self, lcsc: str) -> dict[str, Any] | None:
         """Get full details for a specific part."""
+        # Normalize LCSC code to uppercase (e.g., c20917 -> C20917)
+        lcsc = lcsc.upper()
+
         # Search for the exact part code
         params = {
             "keyword": lcsc,

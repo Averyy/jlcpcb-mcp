@@ -59,6 +59,12 @@ class TestClient:
         params = client._build_search_params(library_type="preferred")
         assert params["preferredComponentFlag"] is True
 
+    def test_build_search_params_library_type_no_fee(self, client):
+        """no_fee combines basic + preferred in a single API call."""
+        params = client._build_search_params(library_type="no_fee")
+        assert params["componentLibraryType"] == "base"
+        assert params["preferredComponentFlag"] is True
+
     def test_transform_part_slim(self, client):
         # Note: API returns firstSortName as subcategory, secondSortName as category
         item = {
