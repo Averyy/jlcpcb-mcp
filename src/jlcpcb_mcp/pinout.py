@@ -19,7 +19,6 @@ PERIPHERAL_PREFIXES = [
 # Pre-compiled regex patterns for pin parsing (performance optimization)
 _START_LABEL_PATTERN = re.compile(r"~([^~]+)~start~~~")
 _END_LABEL_PATTERN = re.compile(r"~([^~]+)~end~~~")
-_COLOR_PATTERN = re.compile(r"#[0-9A-Fa-f]{6}")
 _GPIO_UNDERSCORE_PATTERN = re.compile(r"^(P[A-K]\d+)_(.+)$")
 _GPIO_NOUNDERSCORE_PATTERN = re.compile(r"^(P[A-K]\d+)([A-Z].*)$")
 _PERIPHERAL_PATTERN = re.compile(f"({"|".join(PERIPHERAL_PREFIXES)})")
@@ -96,11 +95,7 @@ def parse_easyeda_pins(data: dict[str, Any]) -> list[dict[str, Any]]:
         else:
             pin_name = pin_num  # Passive: use pin number as name
 
-        # Get first color for type detection (using pre-compiled pattern)
-        colors = _COLOR_PATTERN.findall(element)
-        first_color = colors[0].upper() if colors else None
-
-        pin_type = _detect_pin_type(first_color, pin_name)
+        pin_type = _detect_pin_type(pin_name)
         base_name, functions = split_pin_functions(pin_name)
 
         pins.append({
@@ -115,29 +110,28 @@ def parse_easyeda_pins(data: dict[str, Any]) -> list[dict[str, Any]]:
     return pins
 
 
-def _detect_pin_type(color: str | None, name: str | None) -> str:
-    """Detect pin type from color and name.
+def _detect_pin_type(name: str | None) -> str:
+    """Detect pin type from name only.
 
-    Priority: color (if red/black) -> name keywords -> passive check -> io
+    EasyEDA colors are unreliable (dark red used for both power and I/O,
+    black used for both ground and passive), so we rely solely on pin names.
+
+    Priority: passive (digit-only) -> ground keywords -> power keywords -> io
     """
-    name_upper = (name or "").upper()
+    if not name:
+        return "io"
 
-    # Color-based detection (reliable for red/black)
-    if color == "#FF0000":
-        return "power"
-    if color == "#000000":
-        return "ground"
+    name_upper = name.upper()
 
-    # Name-based fallback (for pins like VBAT, 3V3 that use generic colors)
-    # Check ground before power to properly detect VSS (not VS)
+    # Passive components have numbered-only pins (resistors, capacitors)
+    if name.isdigit():
+        return "passive"
+
+    # Check ground before power to properly detect VSS (not VS prefix)
     if any(kw in name_upper for kw in GROUND_KEYWORDS):
         return "ground"
     if any(kw in name_upper for kw in POWER_KEYWORDS):
         return "power"
-
-    # Passive components have numbered-only pins
-    if name and name.isdigit():
-        return "passive"
 
     return "io"
 

@@ -11,49 +11,54 @@ from jlcpcb_mcp.client import JLCPCBClient
 
 
 class TestPinTypeDetection:
-    """Test pin type detection from color and name."""
+    """Test pin type detection from name.
 
-    def test_detect_power_by_color(self):
-        """Red color should be detected as power."""
-        assert _detect_pin_type("#FF0000", "VCC") == "power"
-        assert _detect_pin_type("#FF0000", "PA0") == "power"  # Color takes precedence
-
-    def test_detect_ground_by_color(self):
-        """Black color should be detected as ground."""
-        assert _detect_pin_type("#000000", "GND") == "ground"
-        assert _detect_pin_type("#000000", "PA0") == "ground"  # Color takes precedence
+    Note: Color-based detection was removed because EasyEDA uses the same colors
+    for different pin types (dark red for both power and I/O, black for both
+    ground and passive). Detection is now purely name-based.
+    """
 
     def test_detect_power_by_name(self):
         """Power keywords in name should be detected."""
-        assert _detect_pin_type("#0000FF", "VCC") == "power"
-        assert _detect_pin_type("#0000FF", "VDD") == "power"
-        assert _detect_pin_type("#0000FF", "VBAT") == "power"
-        assert _detect_pin_type("#0000FF", "3V3") == "power"
-        assert _detect_pin_type("#0000FF", "5V") == "power"
-        assert _detect_pin_type("#0000FF", "VBUS") == "power"
-        assert _detect_pin_type("#0000FF", "VIN") == "power"
-        assert _detect_pin_type("#880000", "VOUT") == "power"
+        assert _detect_pin_type("VCC") == "power"
+        assert _detect_pin_type("VDD") == "power"
+        assert _detect_pin_type("VBAT") == "power"
+        assert _detect_pin_type("3V3") == "power"
+        assert _detect_pin_type("5V") == "power"
+        assert _detect_pin_type("VBUS") == "power"
+        assert _detect_pin_type("VIN") == "power"
+        assert _detect_pin_type("VOUT") == "power"
+        assert _detect_pin_type("AVCC") == "power"
+        assert _detect_pin_type("DVCC") == "power"
 
     def test_detect_ground_by_name(self):
         """Ground keywords in name should be detected."""
-        assert _detect_pin_type("#0000FF", "GND") == "ground"
-        assert _detect_pin_type("#0000FF", "VSS") == "ground"
-        assert _detect_pin_type("#0000FF", "AGND") == "ground"
-        assert _detect_pin_type("#0000FF", "DGND") == "ground"
-        assert _detect_pin_type("#0000FF", "VEE") == "ground"
+        assert _detect_pin_type("GND") == "ground"
+        assert _detect_pin_type("VSS") == "ground"
+        assert _detect_pin_type("AGND") == "ground"
+        assert _detect_pin_type("DGND") == "ground"
+        assert _detect_pin_type("VEE") == "ground"
+        assert _detect_pin_type("PGND") == "ground"
 
     def test_detect_passive(self):
         """Numbered-only pins should be detected as passive."""
-        assert _detect_pin_type("#0000FF", "1") == "passive"
-        assert _detect_pin_type("#0000FF", "2") == "passive"
-        assert _detect_pin_type(None, "1") == "passive"
+        assert _detect_pin_type("1") == "passive"
+        assert _detect_pin_type("2") == "passive"
+        assert _detect_pin_type("123") == "passive"
 
     def test_detect_io_default(self):
         """Non-matching pins should default to io."""
-        assert _detect_pin_type("#0000FF", "PA0") == "io"
-        assert _detect_pin_type("#880000", "G") == "io"
-        assert _detect_pin_type("#0000FF", "SDA") == "io"
-        assert _detect_pin_type(None, "SCL") == "io"
+        assert _detect_pin_type("PA0") == "io"
+        assert _detect_pin_type("G") == "io"
+        assert _detect_pin_type("SDA") == "io"
+        assert _detect_pin_type("SCL") == "io"
+        assert _detect_pin_type("D") == "io"
+        assert _detect_pin_type("S") == "io"
+
+    def test_detect_none_or_empty(self):
+        """None or empty name should default to io."""
+        assert _detect_pin_type(None) == "io"
+        assert _detect_pin_type("") == "io"
 
 
 class TestPinFunctionSplitting:
@@ -155,8 +160,8 @@ class TestParsePins:
         assert pins[1]["name"] == "2"
         assert pins[1]["type"] == "passive"
 
-    def test_parse_power_pins_by_color(self):
-        """Test parsing power pins by color."""
+    def test_parse_power_ground_pins_by_name(self):
+        """Test parsing power/ground pins by name keywords."""
         data = {
             "dataStr": {
                 "shape": [
@@ -168,9 +173,9 @@ class TestParsePins:
         pins = parse_easyeda_pins(data)
         assert len(pins) == 2
         assert pins[0]["name"] == "VDD"
-        assert pins[0]["type"] == "power"
+        assert pins[0]["type"] == "power"  # Detected by name keyword, not color
         assert pins[1]["name"] == "VSS"
-        assert pins[1]["type"] == "ground"
+        assert pins[1]["type"] == "ground"  # Detected by name keyword, not color
 
     def test_parse_empty_shape(self):
         """Test parsing with empty shape array."""
