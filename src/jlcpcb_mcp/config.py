@@ -11,6 +11,10 @@ RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
 JLCPCB_SEARCH_URL = "https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList"
 JLCPCB_DETAIL_URL = "https://cart.jlcpcb.com/shoppingCart/smtGood/getComponentDetail"
 
+# EasyEDA API endpoint (for footprint/symbol availability check)
+EASYEDA_COMPONENT_URL = "https://easyeda.com/api/products/{lcsc}/components"
+EASYEDA_CACHE_TTL = 3600  # Cache footprint availability for 1 hour
+
 # Request settings
 REQUEST_TIMEOUT = 10.0
 MAX_RETRIES = 3

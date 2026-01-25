@@ -1,3 +1,5 @@
 """JLCPCB MCP Server - Search electronic components for PCB assembly."""
 
-__version__ = "1.5.2"
+from importlib.metadata import version
+
+__version__ = version("jlcpcb-mcp")

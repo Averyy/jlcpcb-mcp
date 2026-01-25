@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import time
 from typing import Any, Literal
 
 from curl_cffi import requests as curl_requests
@@ -10,6 +11,8 @@ from .config import (
     get_jlcpcb_headers,
     JLCPCB_SEARCH_URL,
     JLCPCB_DETAIL_URL,
+    EASYEDA_COMPONENT_URL,
+    EASYEDA_CACHE_TTL,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
     DEFAULT_PAGE_SIZE,
@@ -53,6 +56,8 @@ class JLCPCBClient:
         self._category_map: dict[int, dict[str, Any]] = {}  # id -> category
         self._subcategory_map: dict[int, tuple[int, dict[str, Any]]] = {}  # id -> (parent_id, subcategory)
         self._subcategory_name_map: dict[str, int] = {}  # name -> subcategory_id
+        # EasyEDA footprint cache: lcsc -> (timestamp, result_dict)
+        self._easyeda_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def set_categories(self, categories: list[dict[str, Any]]) -> None:
         """Set pre-loaded categories to avoid redundant API calls.
@@ -260,6 +265,83 @@ class JLCPCBClient:
                     raise
 
         raise last_error  # type: ignore
+
+    async def check_easyeda_footprint(self, lcsc: str) -> dict[str, Any]:
+        """Check if a part has an EasyEDA footprint/symbol available.
+
+        Args:
+            lcsc: LCSC part code (e.g., "C12345")
+
+        Returns:
+            Dict with:
+            - has_easyeda_footprint: True/False/None (None = unknown/error)
+            - easyeda_symbol_uuid: UUID string or None
+            - easyeda_footprint_uuid: UUID string or None
+        """
+        lcsc = lcsc.strip().upper()
+
+        # Check cache first
+        if lcsc in self._easyeda_cache:
+            timestamp, result = self._easyeda_cache[lcsc]
+            if time.time() - timestamp < EASYEDA_CACHE_TTL:
+                return result
+
+        # Default result for errors/timeouts
+        unknown_result: dict[str, Any] = {
+            "has_easyeda_footprint": None,
+            "easyeda_symbol_uuid": None,
+            "easyeda_footprint_uuid": None,
+        }
+
+        try:
+            session = await self._get_session()
+            url = EASYEDA_COMPONENT_URL.format(lcsc=lcsc)
+
+            # EasyEDA uses simpler headers than JLCPCB
+            headers = {
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            }
+
+            response = await session.get(url, headers=headers, timeout=5.0)
+
+            # 404 means no footprint exists
+            if response.status_code == 404:
+                result: dict[str, Any] = {
+                    "has_easyeda_footprint": False,
+                    "easyeda_symbol_uuid": None,
+                    "easyeda_footprint_uuid": None,
+                }
+                self._easyeda_cache[lcsc] = (time.time(), result)
+                return result
+
+            response.raise_for_status()
+            data = response.json()
+
+            # Check response structure
+            if data.get("success") is True:
+                # Symbol UUID is in result.uuid, footprint UUID is in packageDetail.uuid
+                result_data = data.get("result", {})
+                package_detail = result_data.get("packageDetail", {})
+                result = {
+                    "has_easyeda_footprint": True,
+                    "easyeda_symbol_uuid": result_data.get("uuid"),
+                    "easyeda_footprint_uuid": package_detail.get("uuid") if package_detail else None,
+                }
+            else:
+                # success: false means no footprint
+                result = {
+                    "has_easyeda_footprint": False,
+                    "easyeda_symbol_uuid": None,
+                    "easyeda_footprint_uuid": None,
+                }
+
+            self._easyeda_cache[lcsc] = (time.time(), result)
+            return result
+
+        except Exception:
+            # On any error, return unknown status (don't cache errors)
+            return unknown_result
 
     def _build_search_params(
         self,
@@ -511,7 +593,7 @@ class JLCPCBClient:
         }
 
     async def get_part(self, lcsc: str) -> dict[str, Any] | None:
-        """Get full details for a specific part."""
+        """Get full details for a specific part, including EasyEDA footprint availability."""
         # Normalize LCSC code to uppercase (e.g., c20917 -> C20917)
         lcsc = lcsc.strip().upper()
 
@@ -534,7 +616,11 @@ class JLCPCBClient:
         # Find exact match
         for item in items:
             if item.get("componentCode") == lcsc:
-                return self._transform_part(item, slim=False)
+                result = self._transform_part(item, slim=False)
+                # Add EasyEDA footprint availability
+                easyeda_info = await self.check_easyeda_footprint(lcsc)
+                result.update(easyeda_info)
+                return result
 
         return None
 
@@ -543,6 +629,7 @@ class JLCPCBClient:
         lcsc: str,
         min_stock: int = 100,
         same_package: bool = False,
+        has_easyeda_footprint: bool | None = None,
         limit: int = 10,
     ) -> dict[str, Any]:
         """Find alternative parts similar to a given component.
@@ -553,6 +640,10 @@ class JLCPCBClient:
             lcsc: LCSC part code to find alternatives for (e.g., "C2557")
             min_stock: Minimum stock for alternatives (default: 100)
             same_package: If True, only return parts with the same package size
+            has_easyeda_footprint: If True, only return parts with EasyEDA footprints.
+                                   If False, only parts without footprints.
+                                   If None (default), don't filter by footprint.
+                                   Note: filtering is slower as it checks each part.
             limit: Maximum alternatives to return (default: 10, max: 50)
 
         Returns:
@@ -562,16 +653,17 @@ class JLCPCBClient:
         effective_limit = max(1, min(limit, MAX_ALTERNATIVES))
         effective_min_stock = max(0, min_stock)
 
-        # Get the original part details
+        # Get the original part details (includes EasyEDA info)
         original = await self.get_part(lcsc)
         if not original:
             return {"error": f"Part {lcsc.strip().upper()} not found"}
 
-        # Build search params
+        # Build search params - get extra if we're filtering by footprint
+        extra_for_filtering = 20 if has_easyeda_footprint is not None else 5
         search_params: dict[str, Any] = {
             "min_stock": effective_min_stock,
             "sort_by": "quantity",  # Best availability first
-            "limit": effective_limit + 5,  # Get extra to filter out original
+            "limit": effective_limit + extra_for_filtering,
         }
 
         # Find subcategory ID using O(1) lookup
@@ -594,10 +686,33 @@ class JLCPCBClient:
 
         # Filter out the original part (normalize LCSC code for comparison)
         original_lcsc = original.get("lcsc", "").upper()
-        alternatives = [
+        candidates = [
             p for p in result.get("results", [])
             if p.get("lcsc", "").upper() != original_lcsc
-        ][:effective_limit]
+        ]
+
+        # Filter by EasyEDA footprint availability if requested
+        if has_easyeda_footprint is not None:
+            filtered_alternatives = []
+            for part in candidates:
+                if len(filtered_alternatives) >= effective_limit:
+                    break
+                part_lcsc = part.get("lcsc", "")
+                if not part_lcsc:
+                    continue
+                easyeda_info = await self.check_easyeda_footprint(part_lcsc)
+                has_fp = easyeda_info.get("has_easyeda_footprint")
+                # Skip parts with unknown footprint status
+                if has_fp is None:
+                    continue
+                # Include if matches filter
+                if has_fp == has_easyeda_footprint:
+                    # Add EasyEDA info to the part
+                    part.update(easyeda_info)
+                    filtered_alternatives.append(part)
+            alternatives = filtered_alternatives
+        else:
+            alternatives = candidates[:effective_limit]
 
         response: dict[str, Any] = {
             "original": {
@@ -609,12 +724,14 @@ class JLCPCBClient:
                 "price": original.get("price"),
                 "subcategory": original.get("subcategory"),
                 "key_specs": original.get("key_specs"),
+                "has_easyeda_footprint": original.get("has_easyeda_footprint"),
             },
             "alternatives": alternatives,
             "search_criteria": {
                 "subcategory": subcategory_name,
                 "min_stock": effective_min_stock,
                 "same_package": same_package,
+                "has_easyeda_footprint": has_easyeda_footprint,
             },
         }
 

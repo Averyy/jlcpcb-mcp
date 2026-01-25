@@ -200,7 +200,13 @@ async def get_part(lcsc: str) -> dict:
         lcsc: LCSC part code (e.g., "C82899")
 
     Returns:
-        Full part details including description, all pricing tiers, datasheet URL, and component attributes.
+        Full part details including description, all pricing tiers, datasheet URL,
+        component attributes, and EasyEDA footprint availability:
+        - has_easyeda_footprint: True if EasyEDA has footprint/symbol, False if not, null if unknown
+        - easyeda_symbol_uuid: UUID for direct EasyEDA editor link (null if no footprint)
+        - easyeda_footprint_uuid: UUID for footprint (null if no footprint)
+
+        Note: has_easyeda_footprint=True means `ato create part` will work for Atopile/KiCad users.
     """
     if not _client:
         raise RuntimeError("Client not initialized")
@@ -294,6 +300,7 @@ async def find_alternatives(
     lcsc: str,
     min_stock: int = 100,
     same_package: bool = False,
+    has_easyeda_footprint: bool | None = None,
     limit: int = 10,
 ) -> dict:
     """Find alternative parts similar to a given component.
@@ -305,11 +312,17 @@ async def find_alternatives(
         lcsc: LCSC part code to find alternatives for (e.g., "C2557")
         min_stock: Minimum stock for alternatives (default: 100)
         same_package: If True, only return parts with the same package size
+        has_easyeda_footprint: Filter by EasyEDA footprint availability:
+            - True: Only return parts WITH EasyEDA footprints (for Atopile/KiCad users)
+            - False: Only return parts WITHOUT footprints
+            - None (default): Don't filter by footprint (fastest)
+            Note: Filtering by footprint is slower as it checks each alternative.
         limit: Maximum alternatives to return (default: 10, max: 50)
 
     Returns:
-        Original part info and list of alternatives sorted by stock.
+        Original part info (with has_easyeda_footprint) and list of alternatives sorted by stock.
         Alternatives include key_specs for easy comparison.
+        When filtering by footprint, alternatives also include EasyEDA UUIDs.
     """
     if not _client:
         raise RuntimeError("Client not initialized")
@@ -318,6 +331,7 @@ async def find_alternatives(
         lcsc=lcsc,
         min_stock=min_stock,
         same_package=same_package,
+        has_easyeda_footprint=has_easyeda_footprint,
         limit=limit,
     )
 

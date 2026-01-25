@@ -10,6 +10,13 @@
 
 **NEVER add Claude attribution to commits** - Do not include "Co-Authored-By: Claude" or any other attribution.
 
+**Always bump version on commits** - Update the `version` field in `pyproject.toml` (the `__init__.py` reads it automatically via `importlib.metadata`).
+
+Use semantic versioning (MAJOR.MINOR.PATCH):
+- **PATCH** (x.x.X): Bug fixes, minor tweaks
+- **MINOR** (x.X.0): New features, improvements
+- **MAJOR** (X.0.0): Major milestones, significant new functionality, or breaking changes
+
 ## Project Overview
 
 MCP server for searching JLCPCB electronic components for PCB assembly. Searches 1.5M+ parts across 52 categories with real-time stock and pricing.
@@ -105,9 +112,18 @@ jlcpcb-mcp/
 |------|-------------|
 | `search_parts` | Search components by keyword, category, filters, sorting |
 | `get_part` | Get full details for a specific LCSC part code |
+| `find_alternatives` | Find similar parts in same subcategory |
 | `list_categories` | Get all 52 primary component categories |
 | `get_subcategories` | Get subcategories for a category |
 | `get_version` | Get server version and health status |
+
+### EasyEDA Footprint Availability
+
+`get_part` and `find_alternatives` include EasyEDA footprint availability:
+- `has_easyeda_footprint`: `true`/`false`/`null` (null = unknown)
+- `easyeda_symbol_uuid` and `easyeda_footprint_uuid`: UUIDs for EasyEDA editor links
+
+**For Atopile/KiCad users:** If `has_easyeda_footprint=true`, then `ato create part` will work. Use `find_alternatives(has_easyeda_footprint=True)` to only get parts with footprints.
 
 ### search_parts Filters
 
