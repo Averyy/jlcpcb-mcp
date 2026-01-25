@@ -89,42 +89,20 @@ class JLCPCBClient:
         """Get a random browser fingerprint."""
         return random.choice(BROWSER_FINGERPRINTS)
 
-    async def _get_session(self) -> curl_requests.AsyncSession:
-        """Get or create an HTTP session with browser impersonation.
+    def _create_session(self) -> curl_requests.AsyncSession:
+        """Create a fresh HTTP session with browser impersonation.
 
-        Uses a pool of sessions to avoid rate limiting and support concurrency.
+        Each request gets a new session to avoid TLS fingerprint tracking.
+        JLCPCB detects and blocks reused sessions, so we create fresh ones.
         """
-        # Create initial session if needed
-        if not self._sessions:
-            self._sessions.append(curl_requests.AsyncSession(
-                impersonate=self._get_browser(),
-                timeout=REQUEST_TIMEOUT,
-            ))
-
-        # Round-robin through sessions
-        session = self._sessions[self._session_index % len(self._sessions)]
-        self._session_index += 1
-
-        return session
-
-    async def _new_session(self) -> curl_requests.AsyncSession:
-        """Create a new session with a fresh browser fingerprint.
-
-        Session pool is capped at 10 to prevent unbounded growth.
-        """
-        # Cap session pool size to prevent unbounded growth
-        if len(self._sessions) >= 10:
-            return self._sessions[self._session_index % len(self._sessions)]
-
-        session = curl_requests.AsyncSession(
+        return curl_requests.AsyncSession(
             impersonate=self._get_browser(),
             timeout=REQUEST_TIMEOUT,
         )
-        self._sessions.append(session)
-        return session
 
     async def close(self):
-        """Close all HTTP sessions."""
+        """Close any remaining HTTP sessions."""
+        # Sessions are now created per-request, but keep this for compatibility
         for session in self._sessions:
             await session.close()
         self._sessions = []
@@ -250,11 +228,16 @@ class JLCPCBClient:
         return None
 
     async def _request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Execute request with retry logic and browser impersonation."""
-        session = await self._get_session()
+        """Execute request with retry logic and browser impersonation.
+
+        Creates a fresh session for each request to avoid TLS fingerprint tracking.
+        JLCPCB detects and blocks reused sessions after several requests.
+        """
         last_error: Exception | None = None
 
         for attempt in range(MAX_RETRIES + 1):
+            # Fresh session for each attempt - avoids fingerprint tracking
+            session = self._create_session()
             try:
                 # Fresh randomized headers for each request
                 headers = get_jlcpcb_headers()
@@ -278,11 +261,13 @@ class JLCPCBClient:
                 last_error = e
                 logger.warning(f"JLCPCB request failed (attempt {attempt + 1}): {type(e).__name__}: {e}")
                 if attempt < MAX_RETRIES:
-                    # On retry, create a new session with a fresh fingerprint
-                    session = await self._new_session()
-                    await asyncio.sleep(0.5 * (attempt + 1))  # Slightly longer delay
+                    # Exponential backoff: 1s, 2s, 4s
+                    await asyncio.sleep(1.0 * (2 ** attempt))
                 else:
                     raise
+            finally:
+                # Always close the session to avoid connection pooling
+                await session.close()
 
         raise last_error  # type: ignore
 
@@ -356,8 +341,8 @@ class JLCPCBClient:
 
         # Use semaphore to limit concurrent requests
         async with self._get_easyeda_semaphore():
+            session = self._create_session()
             try:
-                session = await self._get_session()
                 # URL-encode the LCSC code for safety
                 url = EASYEDA_COMPONENT_URL.format(lcsc=quote(lcsc, safe=''))
 
@@ -410,6 +395,9 @@ class JLCPCBClient:
                 self._easyeda_cache[lcsc] = (time.time(), unknown_result, True)
                 self._maybe_cleanup_easyeda_cache()
                 return unknown_result
+            finally:
+                # Always close the session to avoid connection pooling
+                await session.close()
 
     def _build_search_params(
         self,
