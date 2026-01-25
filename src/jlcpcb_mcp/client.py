@@ -258,11 +258,13 @@ class JLCPCBClient:
             try:
                 # Fresh randomized headers for each request
                 headers = get_jlcpcb_headers()
+                logger.debug(f"JLCPCB request attempt {attempt + 1}: {params.get('keyword', params)}")
                 response = await session.post(
                     url,
                     json=params,
                     headers=headers,
                 )
+                logger.debug(f"JLCPCB response: {response.status_code}")
                 response.raise_for_status()
                 data = response.json()
 
@@ -274,10 +276,11 @@ class JLCPCBClient:
                 return data
             except Exception as e:
                 last_error = e
+                logger.warning(f"JLCPCB request failed (attempt {attempt + 1}): {type(e).__name__}: {e}")
                 if attempt < MAX_RETRIES:
                     # On retry, create a new session with a fresh fingerprint
                     session = await self._new_session()
-                    await asyncio.sleep(0.3 * (attempt + 1))
+                    await asyncio.sleep(0.5 * (attempt + 1))  # Slightly longer delay
                 else:
                     raise
 
@@ -292,7 +295,7 @@ class JLCPCBClient:
     def _maybe_cleanup_easyeda_cache(self) -> None:
         """Cleanup cache only when it exceeds 90% of max size (avoids O(n) on every write)."""
         if len(self._easyeda_cache) >= int(EASYEDA_CACHE_MAX_SIZE * 0.9):
-            self._maybe_cleanup_easyeda_cache()
+            self._cleanup_easyeda_cache()
 
     def _cleanup_easyeda_cache(self) -> None:
         """Remove expired entries and enforce max cache size."""
