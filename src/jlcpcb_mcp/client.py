@@ -12,9 +12,11 @@ from curl_cffi import requests as curl_requests
 
 from .config import (
     get_jlcpcb_headers,
+    get_random_user_agent,
     JLCPCB_SEARCH_URL,
     JLCPCB_DETAIL_URL,
     EASYEDA_COMPONENT_URL,
+    EASYEDA_SYMBOL_URL,
     EASYEDA_CACHE_TTL,
     EASYEDA_ERROR_CACHE_TTL,
     EASYEDA_REQUEST_TIMEOUT,
@@ -28,11 +30,16 @@ from .config import (
     MAX_PAGE_SIZE,
     DEFAULT_MIN_STOCK,
     MAX_ALTERNATIVES,
+    PART_CACHE_TTL,
+    PART_CACHE_MAX_SIZE,
 )
 from .key_attributes import KEY_ATTRIBUTES
 from .manufacturer_aliases import KNOWN_MANUFACTURERS, MANUFACTURER_ALIASES
 
 logger = logging.getLogger(__name__)
+
+# UUID format pattern for EasyEDA symbols (32-char hex)
+_UUID_PATTERN = re.compile(r'^[0-9a-f]{32}$', re.IGNORECASE)
 
 def _normalize_manufacturer_name(name: str) -> str:
     """Normalize manufacturer name for matching: lowercase, remove punctuation, collapse spaces."""
@@ -68,6 +75,10 @@ class JLCPCBClient:
         self._subcategory_name_map: dict[str, int] = {}  # name -> subcategory_id
         # EasyEDA footprint cache: lcsc -> (timestamp, result_dict, is_error)
         self._easyeda_cache: dict[str, tuple[float, dict[str, Any], bool]] = {}
+        # EasyEDA component cache: uuid -> (timestamp, result_dict, is_error)
+        self._easyeda_component_cache: dict[str, tuple[float, dict[str, Any] | ValueError, bool]] = {}
+        # Part details cache: lcsc -> (timestamp, result_dict | None)
+        self._part_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         # Semaphore to limit concurrent EasyEDA requests (avoid rate limiting)
         self._easyeda_semaphore: asyncio.Semaphore | None = None
         # Semaphore to limit concurrent JLCPCB requests (prevents IP blocking at scale)
@@ -422,6 +433,123 @@ class JLCPCBClient:
                 # Always close the session to avoid connection pooling
                 await session.close()
 
+    def _maybe_cleanup_easyeda_component_cache(self) -> None:
+        """Clean up expired entries if cache is too large."""
+        if len(self._easyeda_component_cache) > EASYEDA_CACHE_MAX_SIZE:
+            now = time.time()
+            expired = [
+                k for k, (ts, _, is_err) in self._easyeda_component_cache.items()
+                if now - ts > (EASYEDA_ERROR_CACHE_TTL if is_err else EASYEDA_CACHE_TTL)
+            ]
+            for k in expired:
+                del self._easyeda_component_cache[k]
+
+    def _maybe_cleanup_part_cache(self) -> None:
+        """Clean up expired part cache entries if cache is too large."""
+        if len(self._part_cache) >= int(PART_CACHE_MAX_SIZE * 0.9):
+            now = time.time()
+            # Remove expired entries
+            expired = [
+                k for k, (ts, _) in self._part_cache.items()
+                if now - ts >= PART_CACHE_TTL
+            ]
+            for k in expired:
+                del self._part_cache[k]
+
+            # If still over max size, remove oldest entries
+            if len(self._part_cache) > PART_CACHE_MAX_SIZE:
+                sorted_keys = sorted(
+                    self._part_cache.keys(),
+                    key=lambda k: self._part_cache[k][0]  # Sort by timestamp
+                )
+                for k in sorted_keys[:len(self._part_cache) - PART_CACHE_MAX_SIZE]:
+                    del self._part_cache[k]
+
+    async def get_easyeda_component(self, uuid: str) -> dict[str, Any]:
+        """Fetch component symbol data from EasyEDA API.
+
+        Args:
+            uuid: EasyEDA symbol UUID (32-character hex string)
+
+        Returns:
+            Dict with component data including dataStr.shape array containing pin elements.
+
+        Raises:
+            ValueError: If UUID is invalid or API request fails.
+        """
+        if not uuid or not isinstance(uuid, str):
+            raise ValueError("UUID is required")
+
+        # Validate UUID format (32-char hex)
+        uuid = uuid.strip()
+        if not _UUID_PATTERN.match(uuid):
+            raise ValueError("Invalid UUID format")
+
+        # Check cache first
+        now = time.time()
+        if uuid in self._easyeda_component_cache:
+            timestamp, cached_result, is_error = self._easyeda_component_cache[uuid]
+            ttl = EASYEDA_ERROR_CACHE_TTL if is_error else EASYEDA_CACHE_TTL
+            if now - timestamp < ttl:
+                if is_error:
+                    raise cached_result  # Re-raise cached error
+                return cached_result  # type: ignore
+
+        # Use semaphore to limit concurrent requests
+        async with self._get_easyeda_semaphore():
+            # Retry loop with exponential backoff
+            last_error: Exception | None = None
+            for attempt in range(MAX_RETRIES):
+                session = self._create_session()
+                try:
+                    url = EASYEDA_SYMBOL_URL.format(uuid=quote(uuid, safe=''))
+
+                    headers = {
+                        "Accept": "application/json",
+                        "User-Agent": get_random_user_agent(),
+                    }
+
+                    response = await session.get(url, headers=headers, timeout=EASYEDA_REQUEST_TIMEOUT)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    # Check response structure
+                    if not data.get("success"):
+                        error = ValueError("Failed to fetch component data from EasyEDA")
+                        logger.warning(f"EasyEDA API error for {uuid}: {data.get('message', 'Unknown error')}")
+                        self._easyeda_component_cache[uuid] = (time.time(), error, True)
+                        self._maybe_cleanup_easyeda_component_cache()
+                        raise error
+
+                    result = data.get("result", {})
+                    if "dataStr" not in result:
+                        error = ValueError("Invalid EasyEDA response - missing dataStr")
+                        self._easyeda_component_cache[uuid] = (time.time(), error, True)
+                        self._maybe_cleanup_easyeda_component_cache()
+                        raise error
+
+                    # Cache successful result
+                    self._easyeda_component_cache[uuid] = (time.time(), result, False)
+                    self._maybe_cleanup_easyeda_component_cache()
+                    return result
+
+                except ValueError:
+                    raise  # Don't retry validation errors
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"EasyEDA component fetch failed for {uuid} (attempt {attempt + 1}): {type(e).__name__}: {e}")
+                    if attempt < MAX_RETRIES - 1:
+                        await asyncio.sleep(0.5 * (2 ** attempt))  # Exponential backoff
+                finally:
+                    await session.close()
+
+            # All retries exhausted
+            error = ValueError("Failed to fetch component data from EasyEDA")
+            logger.warning(f"EasyEDA component fetch failed for {uuid} after {MAX_RETRIES} attempts: {last_error}")
+            self._easyeda_component_cache[uuid] = (time.time(), error, True)
+            self._maybe_cleanup_easyeda_component_cache()
+            raise error
+
     def _build_search_params(
         self,
         query: str | None = None,
@@ -708,13 +836,24 @@ class JLCPCBClient:
         return dict(results_list)
 
     async def get_part(self, lcsc: str) -> dict[str, Any] | None:
-        """Get full details for a specific part, including EasyEDA footprint availability."""
+        """Get full details for a specific part, including EasyEDA footprint availability.
+
+        Results are cached for 1 hour to reduce API calls. Stock/price changes
+        are infrequent enough that this is acceptable for most use cases.
+        """
         # Normalize LCSC code to uppercase (e.g., c20917 -> C20917)
         lcsc = lcsc.strip().upper()
 
         # Validate LCSC code format (C followed by digits)
         if not lcsc or not lcsc.startswith("C") or not lcsc[1:].isdigit():
             return None
+
+        # Check cache first
+        now = time.time()
+        if lcsc in self._part_cache:
+            timestamp, cached_result = self._part_cache[lcsc]
+            if now - timestamp < PART_CACHE_TTL:
+                return cached_result
 
         # Search for the exact part code
         params = {
@@ -735,8 +874,14 @@ class JLCPCBClient:
                 # Add EasyEDA footprint availability
                 easyeda_info = await self.check_easyeda_footprint(lcsc)
                 result.update(easyeda_info)
+                # Cache the result
+                self._part_cache[lcsc] = (time.time(), result)
+                self._maybe_cleanup_part_cache()
                 return result
 
+        # Cache negative result (part not found)
+        self._part_cache[lcsc] = (time.time(), None)
+        self._maybe_cleanup_part_cache()
         return None
 
     async def find_alternatives(

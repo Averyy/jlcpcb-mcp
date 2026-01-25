@@ -34,6 +34,7 @@ from .bom import (
     check_extended_part,
     check_easyeda_footprint,
 )
+from .pinout import parse_easyeda_pins, generate_pinout_summary
 
 logger = logging.getLogger(__name__)
 
@@ -407,6 +408,119 @@ async def find_alternatives(
         has_easyeda_footprint=has_easyeda_footprint,
         limit=limit,
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get Component Pinout",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+async def get_pinout(lcsc: str | None = None, uuid: str | None = None) -> dict:
+    """Get pin information for a component from EasyEDA symbol data.
+
+    Useful for verifying circuit connections in Atopile/KiCad by knowing exact
+    pin names, numbers, and alternate functions.
+
+    Args:
+        lcsc: LCSC part code (e.g., "C8304"). If provided, fetches UUID automatically.
+        uuid: EasyEDA symbol UUID directly (alternative to lcsc)
+
+    One of lcsc or uuid must be provided.
+
+    Returns:
+        Pin mapping with:
+        - lcsc: LCSC code (if provided)
+        - model: Part model/name
+        - manufacturer: Manufacturer name
+        - package: Package type
+        - pin_count: Total number of pins
+        - pins: List of pins, each with:
+            - number: Physical pin number (e.g., "1", "2")
+            - name: Pin name (e.g., "PA0", "VCC", "G")
+            - functions: Alternate functions for MCU pins (e.g., ["SPI1_SCK", "ADC1_IN5"])
+            - type: Pin type ("power", "ground", "io", or "passive")
+        - summary: (MCUs only) Interface summary with power/ground pins and peripheral counts
+        - easyeda_symbol_uuid: UUID for reference
+
+    Pin types:
+        - power: Supply pins (VCC, VDD, VBAT, 3V3, etc.)
+        - ground: Ground pins (GND, VSS, AGND, etc.)
+        - io: Input/output pins (GPIO, signal pins)
+        - passive: Numbered pins on passive components (resistors, capacitors)
+
+    Example output for STM32F103CBT6:
+        {"pin_count": 48, "pins": [
+            {"number": "1", "name": "VBAT", "functions": [], "type": "power"},
+            {"number": "10", "name": "PA0", "functions": ["WKUP", "USART2_CTS", "ADC12_IN0"], "type": "io"},
+            ...
+        ], "summary": {"power": ["VBAT", "VDD"], "ground": ["VSS"], "interfaces": {"spi": {"count": 2, ...}}}}
+
+    Example output for MOSFET AO3400:
+        {"pin_count": 3, "pins": [
+            {"number": "1", "name": "G", "functions": [], "type": "io"},
+            {"number": "2", "name": "S", "functions": [], "type": "io"},
+            {"number": "3", "name": "D", "functions": [], "type": "io"}
+        ]}
+    """
+    if not _client:
+        raise RuntimeError("Client not initialized")
+
+    if not lcsc and not uuid:
+        return {"error": "Must provide either lcsc or uuid"}
+
+    part = None
+    symbol_uuid = uuid
+
+    if lcsc:
+        # Normalize LCSC code
+        lcsc = lcsc.strip().upper()
+
+        # Get UUID and part details from LCSC code
+        part = await _client.get_part(lcsc)
+        if not part:
+            return {"error": f"Part not found: {lcsc}"}
+
+        if not part.get("has_easyeda_footprint"):
+            return {"error": f"No EasyEDA symbol available for {lcsc}"}
+
+        symbol_uuid = part.get("easyeda_symbol_uuid")
+        if not symbol_uuid:
+            return {"error": f"No EasyEDA symbol UUID for {lcsc}"}
+
+    try:
+        # Fetch EasyEDA component data
+        easyeda_data = await _client.get_easyeda_component(symbol_uuid)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # Parse pins from EasyEDA data
+    pins = parse_easyeda_pins(easyeda_data)
+
+    if not pins:
+        return {"error": "Invalid EasyEDA response - missing pin data"}
+
+    # Generate summary for complex components (MCUs with interfaces)
+    summary = generate_pinout_summary(pins)
+
+    result: dict = {
+        "lcsc": lcsc,
+        "model": part.get("model") if part else None,
+        "manufacturer": part.get("manufacturer") if part else None,
+        "package": part.get("package") if part else None,
+        "pin_count": len(pins),
+        "pins": pins,
+        "easyeda_symbol_uuid": symbol_uuid,
+    }
+
+    # Only include summary for components with interfaces (MCUs, complex ICs)
+    if summary:
+        result["summary"] = summary
+
+    return result
 
 
 async def _process_bom(

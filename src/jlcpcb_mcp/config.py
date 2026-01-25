@@ -11,8 +11,9 @@ RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
 JLCPCB_SEARCH_URL = "https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList"
 JLCPCB_DETAIL_URL = "https://cart.jlcpcb.com/shoppingCart/smtGood/getComponentDetail"
 
-# EasyEDA API endpoint (for footprint/symbol availability check)
+# EasyEDA API endpoints
 EASYEDA_COMPONENT_URL = "https://easyeda.com/api/products/{lcsc}/components"
+EASYEDA_SYMBOL_URL = "https://easyeda.com/api/components/{uuid}"
 EASYEDA_CACHE_TTL = 3600  # Cache footprint availability for 1 hour
 EASYEDA_ERROR_CACHE_TTL = 300  # Cache errors for 5 minutes to avoid hammering failing API
 EASYEDA_REQUEST_TIMEOUT = 5.0  # Shorter timeout for EasyEDA (non-critical)
@@ -28,6 +29,10 @@ DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 DEFAULT_MIN_STOCK = 50
 MAX_ALTERNATIVES = 50
+
+# Part cache settings (JLCPCB API)
+PART_CACHE_TTL = 3600  # Cache part details for 1 hour
+PART_CACHE_MAX_SIZE = 5000  # Max cached parts
 
 # User agent pool - real browser signatures from jlcpcb.com visitors
 _USER_AGENTS = [
@@ -81,6 +86,11 @@ def get_jlcpcb_headers() -> dict[str, str]:
         headers["Priority"] = "u=1, i"
 
     return headers
+
+
+def get_random_user_agent() -> str:
+    """Get a random user agent from the pool."""
+    return random.choice(_USER_AGENTS)
 
 
 # Static fallback (used if needed)

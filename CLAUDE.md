@@ -96,13 +96,15 @@ jlcpcb-mcp/
 │   ├── client.py           # JLCPCB API client (curl_cffi)
 │   ├── server.py           # FastMCP server
 │   ├── bom.py              # BOM generation and validation
+│   ├── pinout.py           # EasyEDA pinout parser
 │   ├── categories.py       # 52 categories + subcategories
 │   └── key_attributes.py   # Key specs mapping (758 subcategories)
 ├── landing/                # Website at jlcmcp.dev
 │   └── index.html
 ├── tests/
 │   ├── test_client.py      # Client unit + integration tests
-│   └── test_bom.py         # BOM unit + integration tests
+│   ├── test_bom.py         # BOM unit + integration tests
+│   └── test_pinout.py      # Pinout parser unit + integration tests
 ├── Dockerfile
 ├── docker-compose.yml
 └── pyproject.toml
@@ -114,6 +116,7 @@ jlcpcb-mcp/
 |------|-------------|
 | `search_parts` | Search components by keyword, category, filters, sorting |
 | `get_part` | Get full details for a specific LCSC part code |
+| `get_pinout` | Get component pin information from EasyEDA symbol data |
 | `find_alternatives` | Find similar parts in same subcategory with library_type, package, and EasyEDA filters |
 | `list_categories` | Get all 52 primary component categories |
 | `get_subcategories` | Get subcategories for a category |
@@ -141,6 +144,44 @@ Use `find_alternatives(has_easyeda_footprint=True)` to only get parts with EasyE
 | `limit` | int | Max alternatives to return (default: 10, max: 50) |
 
 **Cost optimization:** Use `library_type="no_fee"` to find basic/preferred alternatives that avoid the $3 extended part fee.
+
+### get_pinout Tool
+
+Fetches component pin information from EasyEDA symbol data. Useful for verifying circuit connections in Atopile/KiCad.
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lcsc` | string | LCSC part code (e.g., "C8304"). Fetches UUID automatically. |
+| `uuid` | string | EasyEDA symbol UUID directly (alternative to lcsc) |
+
+**Returns:**
+- `pin_count`: Total number of pins
+- `pins`: List of pins with number, name, functions, and type
+- `summary`: (MCUs only) Interface summary with power/ground pins and peripheral counts
+
+**Pin Types:**
+- `power`: VCC, VDD, VBAT, 3V3, etc.
+- `ground`: GND, VSS, AGND, etc.
+- `io`: GPIO, signal pins
+- `passive`: Numbered pins on resistors, capacitors
+
+**Example - STM32F103CBT6:**
+```json
+{"pin_count": 48, "pins": [
+  {"number": "1", "name": "VBAT", "functions": [], "type": "power"},
+  {"number": "10", "name": "PA0", "functions": ["WKUP", "USART2_CTS", "ADC12_IN0"], "type": "io"}
+], "summary": {"power": ["VBAT", "VDD"], "ground": ["VSS"], "interfaces": {"spi": {"count": 2}}}}
+```
+
+**Example - AO3400 MOSFET:**
+```json
+{"pin_count": 3, "pins": [
+  {"number": "1", "name": "G", "functions": [], "type": "io"},
+  {"number": "2", "name": "S", "functions": [], "type": "io"},
+  {"number": "3", "name": "D", "functions": [], "type": "io"}
+]}
+```
 
 ### search_parts Filters
 
