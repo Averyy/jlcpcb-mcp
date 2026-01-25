@@ -592,6 +592,21 @@ class JLCPCBClient:
             "has_more": page * limit < total,
         }
 
+    async def get_parts_batch(self, lcsc_codes: list[str]) -> dict[str, dict[str, Any] | None]:
+        """Fetch multiple parts sequentially.
+
+        Args:
+            lcsc_codes: List of LCSC codes to fetch
+
+        Returns:
+            Dict mapping lcsc_code -> part_data (or None if not found)
+        """
+        results: dict[str, dict[str, Any] | None] = {}
+        for lcsc in lcsc_codes:
+            normalized = lcsc.strip().upper()
+            results[normalized] = await self.get_part(normalized)
+        return results
+
     async def get_part(self, lcsc: str) -> dict[str, Any] | None:
         """Get full details for a specific part, including EasyEDA footprint availability."""
         # Normalize LCSC code to uppercase (e.g., c20917 -> C20917)

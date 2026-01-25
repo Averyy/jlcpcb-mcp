@@ -16,6 +16,23 @@ from starlette.routing import Route
 from . import __version__
 from .config import RATE_LIMIT_REQUESTS, HTTP_PORT, DEFAULT_MIN_STOCK, MAX_PAGE_SIZE
 from .client import JLCPCBClient
+from .bom import (
+    BOMPart,
+    BOMIssue,
+    validate_designators,
+    merge_duplicate_parts,
+    sort_by_designator,
+    generate_comment,
+    check_footprint_mismatch,
+    calculate_line_cost,
+    generate_csv,
+    generate_summary,
+    validate_manual_part,
+    check_stock_issues,
+    check_moq_issue,
+    check_extended_part,
+    check_easyeda_footprint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +351,301 @@ async def find_alternatives(
         has_easyeda_footprint=has_easyeda_footprint,
         limit=limit,
     )
+
+
+async def _process_bom(
+    parts: list[dict[str, Any]],
+    board_qty: int | None = None,
+    min_stock: int = 0,
+) -> tuple[list[BOMPart], list[BOMIssue], dict[str, Any]]:
+    """Process BOM parts: validate, fetch, and calculate costs.
+
+    Internal helper used by both validate_bom and export_bom.
+
+    Returns:
+        Tuple of (processed parts, issues, summary)
+    """
+    if not _client:
+        raise RuntimeError("Client not initialized")
+
+    issues: list[BOMIssue] = []
+
+    # Step 1: Validate designators (check for duplicates)
+    issues.extend(validate_designators(parts))
+
+    # Step 2: Merge duplicate LCSC codes
+    merged_parts, merge_issues = merge_duplicate_parts(parts)
+    issues.extend(merge_issues)
+
+    # Step 3: Validate manual parts have required fields
+    for part in merged_parts:
+        if not part.get("lcsc"):
+            issues.extend(validate_manual_part(part))
+
+    # Step 4: Fetch LCSC parts
+    lcsc_codes = [p["lcsc"] for p in merged_parts if p.get("lcsc")]
+    fetched_parts = await _client.get_parts_batch(lcsc_codes) if lcsc_codes else {}
+
+    # Step 5: Build BOMPart objects
+    bom_parts: list[BOMPart] = []
+
+    for part in merged_parts:
+        lcsc = part.get("lcsc")
+        designators = part.get("designators", [])
+        user_comment = part.get("comment")
+        user_footprint = part.get("footprint")
+
+        if lcsc:
+            lcsc = lcsc.strip().upper()
+            fetched = fetched_parts.get(lcsc)
+
+            if not fetched:
+                issues.append(BOMIssue(
+                    lcsc=lcsc,
+                    designators=designators,
+                    severity="error",
+                    issue="Part not found",
+                ))
+                # Create minimal BOMPart for tracking
+                bom_parts.append(BOMPart(
+                    lcsc=lcsc,
+                    designators=designators,
+                    quantity=len(designators),
+                    comment=user_comment or "Unknown",
+                    footprint=user_footprint or "Unknown",
+                ))
+                continue
+
+            # Check footprint mismatch
+            if user_footprint:
+                mismatch = check_footprint_mismatch(user_footprint, fetched.get("package"))
+                if mismatch:
+                    mismatch.lcsc = lcsc
+                    mismatch.designators = designators
+                    issues.append(mismatch)
+
+            # Calculate pricing
+            prices = fetched.get("prices", [])
+            order_qty, unit_price, line_cost = calculate_line_cost(
+                prices, len(designators), board_qty
+            )
+
+            bom_part = BOMPart(
+                lcsc=lcsc,
+                designators=designators,
+                quantity=len(designators),
+                comment=generate_comment(fetched, user_comment),
+                footprint=user_footprint or fetched.get("package", "Unknown"),
+                stock=fetched.get("stock"),
+                price=unit_price,
+                order_qty=order_qty,
+                line_cost=line_cost,
+                library_type=fetched.get("library_type"),
+                min_order=fetched.get("min_order"),
+                manufacturer=fetched.get("manufacturer"),
+                model=fetched.get("model"),
+                has_easyeda_footprint=fetched.get("has_easyeda_footprint"),
+            )
+            bom_parts.append(bom_part)
+
+            # Check for stock issues
+            issues.extend(check_stock_issues(bom_part, min_stock, board_qty))
+
+            # Check MOQ
+            moq_issue = check_moq_issue(bom_part)
+            if moq_issue:
+                issues.append(moq_issue)
+
+            # Check extended part
+            ext_issue = check_extended_part(bom_part)
+            if ext_issue:
+                issues.append(ext_issue)
+
+            # Check EasyEDA footprint
+            eda_issue = check_easyeda_footprint(bom_part)
+            if eda_issue:
+                issues.append(eda_issue)
+
+        else:
+            # Manual part (no LCSC)
+            bom_parts.append(BOMPart(
+                lcsc=None,
+                designators=designators,
+                quantity=len(designators),
+                comment=user_comment or "Unknown",
+                footprint=user_footprint or "Unknown",
+                order_qty=len(designators) * (board_qty or 1),
+            ))
+
+    # Step 6: Sort by designator
+    sorted_parts = sort_by_designator(bom_parts)
+
+    # Step 7: Generate summary
+    summary = generate_summary(sorted_parts, board_qty, issues)
+
+    return sorted_parts, issues, summary
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Validate BOM",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+async def validate_bom(
+    parts: list[dict[str, Any]],
+    board_qty: int | None = None,
+    min_stock: int = 0,
+) -> dict:
+    """Validate a BOM and check part availability without generating CSV.
+
+    Use this for iterative checking during part selection. For final export,
+    use export_bom instead.
+
+    Args:
+        parts: List of parts, each with:
+            - lcsc: (optional) LCSC code like "C1525". If provided, auto-fetches details.
+            - designators: (required) List of designators, e.g., ["C1", "C2", "C3"]
+            - comment: (optional) Override auto-generated comment, or provide for manual parts
+            - footprint: (optional) Override auto-fetched footprint, or provide for manual parts
+        board_qty: (optional) Number of boards. Validates stock against total needed.
+            Example: board_qty=100 with 3× C1525 per board needs 300 in stock.
+        min_stock: (optional) Minimum stock threshold for warnings. Ignored if board_qty provided.
+
+    Returns:
+        parts: Structured data for each BOM line with lcsc, designators, quantity,
+               comment, footprint, stock, price, order_qty, line_cost, library_type,
+               min_order, manufacturer, model, has_easyeda_footprint.
+        summary: total_line_items, total_components, estimated_cost, extended_parts_count,
+                 extended_parts_fee, total_with_fees, board_qty, stock_sufficient.
+        issues: List of problems found. Each has lcsc, designators, severity (error/warning),
+                and human-readable issue description. Common issues:
+                - "Part not found" (error)
+                - "Out of stock (0 available)" (error)
+                - "Insufficient stock: need X, have Y" (error)
+                - "Duplicate designator: X appears multiple times" (error)
+                - "Extended part: +$3 assembly fee" (warning)
+                - "No EasyEDA footprint available" (warning)
+
+    Note: Issues are reported but don't block the response. Caller decides whether to proceed.
+    """
+    sorted_parts, issues, summary = await _process_bom(parts, board_qty, min_stock)
+
+    return {
+        "parts": [
+            {
+                "lcsc": p.lcsc,
+                "designators": p.designators,
+                "designators_str": p.designators_str,
+                "quantity": p.quantity,
+                "comment": p.comment,
+                "footprint": p.footprint,
+                "stock": p.stock,
+                "price": p.price,
+                "order_qty": p.order_qty,
+                "line_cost": p.line_cost,
+                "library_type": p.library_type,
+                "min_order": p.min_order,
+                "manufacturer": p.manufacturer,
+                "model": p.model,
+                "has_easyeda_footprint": p.has_easyeda_footprint,
+            }
+            for p in sorted_parts
+        ],
+        "summary": summary,
+        "issues": [
+            {
+                "lcsc": i.lcsc,
+                "designators": i.designators,
+                "severity": i.severity,
+                "issue": i.issue,
+            }
+            for i in issues
+        ],
+    }
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Export BOM",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+async def export_bom(
+    parts: list[dict[str, Any]],
+    board_qty: int | None = None,
+    min_stock: int = 0,
+) -> dict:
+    """Generate a JLCPCB-compatible BOM CSV file.
+
+    Same as validate_bom but also generates CSV output for upload to JLCPCB.
+
+    Args:
+        parts: List of parts, each with:
+            - lcsc: (optional) LCSC code like "C1525". If provided, auto-fetches details.
+            - designators: (required) List of designators, e.g., ["C1", "C2", "C3"]
+            - comment: (optional) Override auto-generated comment, or provide for manual parts
+            - footprint: (optional) Override auto-fetched footprint, or provide for manual parts
+        board_qty: (optional) Number of boards. Validates stock against total needed.
+        min_stock: (optional) Minimum stock threshold for warnings.
+
+    Returns:
+        csv: JLCPCB-compatible CSV content (Comment,Designator,Footprint,LCSC Part #)
+        parts: Structured data for each BOM line (same as validate_bom)
+        summary: Cost and count summary (same as validate_bom)
+        issues: List of problems found (same as validate_bom)
+
+    CSV Format:
+        Comment,Designator,Footprint,LCSC Part #
+        100nF 50V X7R 0402,"C1,C2,C3",0402,C1525
+        10K 1% 0603,"R1,R2",0603,C25804
+
+    Note: Prices are estimates and may change. Stock validation is point-in-time.
+    """
+    sorted_parts, issues, summary = await _process_bom(parts, board_qty, min_stock)
+
+    # Generate CSV
+    csv_content = generate_csv(sorted_parts)
+
+    return {
+        "csv": csv_content,
+        "parts": [
+            {
+                "lcsc": p.lcsc,
+                "designators": p.designators,
+                "designators_str": p.designators_str,
+                "quantity": p.quantity,
+                "comment": p.comment,
+                "footprint": p.footprint,
+                "stock": p.stock,
+                "price": p.price,
+                "order_qty": p.order_qty,
+                "line_cost": p.line_cost,
+                "library_type": p.library_type,
+                "min_order": p.min_order,
+                "manufacturer": p.manufacturer,
+                "model": p.model,
+                "has_easyeda_footprint": p.has_easyeda_footprint,
+            }
+            for p in sorted_parts
+        ],
+        "summary": summary,
+        "issues": [
+            {
+                "lcsc": i.lcsc,
+                "designators": i.designators,
+                "severity": i.severity,
+                "issue": i.issue,
+            }
+            for i in issues
+        ],
+    }
 
 
 @mcp.tool(

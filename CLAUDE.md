@@ -95,12 +95,14 @@ jlcpcb-mcp/
 │   ├── config.py           # Configuration, headers
 │   ├── client.py           # JLCPCB API client (curl_cffi)
 │   ├── server.py           # FastMCP server
+│   ├── bom.py              # BOM generation and validation
 │   ├── categories.py       # 52 categories + subcategories
 │   └── key_attributes.py   # Key specs mapping (758 subcategories)
 ├── landing/                # Website at jlcmcp.dev
 │   └── index.html
 ├── tests/
-│   └── test_client.py      # Unit + integration tests
+│   ├── test_client.py      # Client unit + integration tests
+│   └── test_bom.py         # BOM unit + integration tests
 ├── Dockerfile
 ├── docker-compose.yml
 └── pyproject.toml
@@ -115,6 +117,8 @@ jlcpcb-mcp/
 | `find_alternatives` | Find similar parts in same subcategory |
 | `list_categories` | Get all 52 primary component categories |
 | `get_subcategories` | Get subcategories for a category |
+| `validate_bom` | Validate BOM parts, check stock/availability, calculate costs (no CSV) |
+| `export_bom` | Generate JLCPCB-compatible BOM CSV with validation and cost calculation |
 | `get_version` | Get server version and health status |
 
 ### EasyEDA Footprint Availability
@@ -123,7 +127,7 @@ jlcpcb-mcp/
 - `has_easyeda_footprint`: `true`/`false`/`null` (null = unknown)
 - `easyeda_symbol_uuid` and `easyeda_footprint_uuid`: UUIDs for EasyEDA editor links
 
-**For Atopile/KiCad users:** If `has_easyeda_footprint=true`, then `ato create part` will work. Use `find_alternatives(has_easyeda_footprint=True)` to only get parts with footprints.
+Use `find_alternatives(has_easyeda_footprint=True)` to only get parts with EasyEDA footprints available.
 
 ### search_parts Filters
 
@@ -144,6 +148,40 @@ JLCPCB has three library types that affect assembly fees:
 - **extended**: $3 per unique part - less common parts
 
 Use `library_type="no_fee"` to search both basic and preferred parts (merged results).
+
+## BOM Export Tools
+
+`validate_bom` and `export_bom` generate JLCPCB-compatible BOMs from LCSC part numbers.
+
+### Input Format
+
+```python
+parts = [
+    {"lcsc": "C1525", "designators": ["C1", "C2", "C3"]},
+    {"lcsc": "C25804", "designators": ["R1", "R2"]},
+    {"designators": ["J1"], "comment": "USB-C", "footprint": "USB-C-SMD"},  # Manual part
+]
+board_qty = 100  # Optional: validates stock for 100 boards
+```
+
+### Features
+
+- Auto-fetches part details (Comment, Footprint) from LCSC codes
+- Merges duplicate LCSC codes (combines designators)
+- Detects duplicate designators (error)
+- Calculates tiered pricing based on order quantity
+- Flags extended parts ($3 assembly fee each)
+- Validates stock against `board_qty × quantity_per_board`
+- Checks MOQ (minimum order quantity)
+- Reports EasyEDA footprint availability
+
+### CSV Output Format
+
+```csv
+Comment,Designator,Footprint,LCSC Part #
+100nF 50V X7R 0402,"C1,C2,C3",0402,C1525
+10K 1% 0603,"R1,R2",0603,C25804
+```
 
 ## Maintaining key_attributes.py
 

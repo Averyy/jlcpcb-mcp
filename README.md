@@ -94,6 +94,8 @@ Add to `.vscode/mcp.json`:
 | `find_alternatives` | Find similar parts with better stock in the same subcategory |
 | `list_categories` | Get all 52 primary component categories |
 | `get_subcategories` | Get subcategories for a category |
+| `validate_bom` | Validate BOM parts, check stock/availability, calculate costs |
+| `export_bom` | Generate JLCPCB-compatible BOM CSV with validation and cost calculation |
 | `get_version` | Server version and health status |
 
 ### search_parts Parameters
