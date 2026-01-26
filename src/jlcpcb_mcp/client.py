@@ -79,10 +79,32 @@ class JLCPCBClient:
         self._easyeda_component_cache: dict[str, tuple[float, dict[str, Any] | ValueError, bool]] = {}
         # Part details cache: lcsc -> (timestamp, result_dict | None)
         self._part_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+        # Locks for thread-safe cache access during concurrent async operations
+        self._easyeda_cache_lock: asyncio.Lock | None = None
+        self._easyeda_component_cache_lock: asyncio.Lock | None = None
+        self._part_cache_lock: asyncio.Lock | None = None
         # Semaphore to limit concurrent EasyEDA requests (avoid rate limiting)
         self._easyeda_semaphore: asyncio.Semaphore | None = None
         # Semaphore to limit concurrent JLCPCB requests (prevents IP blocking at scale)
         self._jlcpcb_semaphore: asyncio.Semaphore | None = None
+
+    def _get_easyeda_cache_lock(self) -> asyncio.Lock:
+        """Lazy init lock (must be created in async context)."""
+        if self._easyeda_cache_lock is None:
+            self._easyeda_cache_lock = asyncio.Lock()
+        return self._easyeda_cache_lock
+
+    def _get_easyeda_component_cache_lock(self) -> asyncio.Lock:
+        """Lazy init lock (must be created in async context)."""
+        if self._easyeda_component_cache_lock is None:
+            self._easyeda_component_cache_lock = asyncio.Lock()
+        return self._easyeda_component_cache_lock
+
+    def _get_part_cache_lock(self) -> asyncio.Lock:
+        """Lazy init lock (must be created in async context)."""
+        if self._part_cache_lock is None:
+            self._part_cache_lock = asyncio.Lock()
+        return self._part_cache_lock
 
     def set_categories(self, categories: list[dict[str, Any]]) -> None:
         """Set pre-loaded categories to avoid redundant API calls.
@@ -311,13 +333,8 @@ class JLCPCBClient:
             self._jlcpcb_semaphore = asyncio.Semaphore(JLCPCB_CONCURRENT_LIMIT)
         return self._jlcpcb_semaphore
 
-    def _maybe_cleanup_easyeda_cache(self) -> None:
-        """Cleanup cache only when it exceeds 90% of max size (avoids O(n) on every write)."""
-        if len(self._easyeda_cache) >= int(EASYEDA_CACHE_MAX_SIZE * 0.9):
-            self._cleanup_easyeda_cache()
-
-    def _cleanup_easyeda_cache(self) -> None:
-        """Remove expired entries and enforce max cache size."""
+    def _cleanup_easyeda_cache_unlocked(self) -> None:
+        """Remove expired entries and enforce max cache size. Must hold lock."""
         now = time.time()
         # Remove expired entries
         expired = [
@@ -335,6 +352,13 @@ class JLCPCBClient:
             )
             for k in sorted_keys[:len(self._easyeda_cache) - EASYEDA_CACHE_MAX_SIZE]:
                 del self._easyeda_cache[k]
+
+    async def _cache_easyeda_result(self, lcsc: str, result: dict[str, Any], is_error: bool) -> None:
+        """Cache EasyEDA result with lock protection."""
+        async with self._get_easyeda_cache_lock():
+            self._easyeda_cache[lcsc] = (time.time(), result, is_error)
+            if len(self._easyeda_cache) >= int(EASYEDA_CACHE_MAX_SIZE * 0.9):
+                self._cleanup_easyeda_cache_unlocked()
 
     async def check_easyeda_footprint(self, lcsc: str) -> dict[str, Any]:
         """Check if a part has an EasyEDA footprint/symbol available.
@@ -360,11 +384,12 @@ class JLCPCBClient:
 
         # Check cache first (with TTL awareness for errors vs successes)
         now = time.time()
-        if lcsc in self._easyeda_cache:
-            timestamp, result, is_error = self._easyeda_cache[lcsc]
-            ttl = EASYEDA_ERROR_CACHE_TTL if is_error else EASYEDA_CACHE_TTL
-            if now - timestamp < ttl:
-                return result
+        async with self._get_easyeda_cache_lock():
+            if lcsc in self._easyeda_cache:
+                timestamp, result, is_error = self._easyeda_cache[lcsc]
+                ttl = EASYEDA_ERROR_CACHE_TTL if is_error else EASYEDA_CACHE_TTL
+                if now - timestamp < ttl:
+                    return result
 
         # Default result for errors/timeouts
         unknown_result: dict[str, Any] = {
@@ -394,8 +419,7 @@ class JLCPCBClient:
                         "easyeda_symbol_uuid": None,
                         "easyeda_footprint_uuid": None,
                     }
-                    self._easyeda_cache[lcsc] = (time.time(), result, False)
-                    self._maybe_cleanup_easyeda_cache()
+                    await self._cache_easyeda_result(lcsc, result, False)
                     return result
 
                 response.raise_for_status()
@@ -419,22 +443,20 @@ class JLCPCBClient:
                         "easyeda_footprint_uuid": None,
                     }
 
-                self._easyeda_cache[lcsc] = (time.time(), result, False)
-                self._maybe_cleanup_easyeda_cache()
+                await self._cache_easyeda_result(lcsc, result, False)
                 return result
 
             except Exception as e:
                 # Log the error for debugging, cache with shorter TTL to avoid hammering
                 logger.warning(f"EasyEDA footprint check failed for {lcsc}: {type(e).__name__}: {e}")
-                self._easyeda_cache[lcsc] = (time.time(), unknown_result, True)
-                self._maybe_cleanup_easyeda_cache()
+                await self._cache_easyeda_result(lcsc, unknown_result, True)
                 return unknown_result
             finally:
                 # Always close the session to avoid connection pooling
                 await session.close()
 
-    def _maybe_cleanup_easyeda_component_cache(self) -> None:
-        """Clean up expired entries if cache is too large."""
+    def _cleanup_easyeda_component_cache_unlocked(self) -> None:
+        """Clean up expired entries if cache is too large. Must hold lock."""
         if len(self._easyeda_component_cache) > EASYEDA_CACHE_MAX_SIZE:
             now = time.time()
             expired = [
@@ -444,8 +466,16 @@ class JLCPCBClient:
             for k in expired:
                 del self._easyeda_component_cache[k]
 
-    def _maybe_cleanup_part_cache(self) -> None:
-        """Clean up expired part cache entries if cache is too large."""
+    async def _cache_easyeda_component_result(
+        self, uuid: str, result: dict[str, Any] | ValueError, is_error: bool
+    ) -> None:
+        """Cache EasyEDA component result with lock protection."""
+        async with self._get_easyeda_component_cache_lock():
+            self._easyeda_component_cache[uuid] = (time.time(), result, is_error)
+            self._cleanup_easyeda_component_cache_unlocked()
+
+    def _cleanup_part_cache_unlocked(self) -> None:
+        """Clean up expired part cache entries if cache is too large. Must hold lock."""
         if len(self._part_cache) >= int(PART_CACHE_MAX_SIZE * 0.9):
             now = time.time()
             # Remove expired entries
@@ -464,6 +494,12 @@ class JLCPCBClient:
                 )
                 for k in sorted_keys[:len(self._part_cache) - PART_CACHE_MAX_SIZE]:
                     del self._part_cache[k]
+
+    async def _cache_part_result(self, lcsc: str, result: dict[str, Any] | None) -> None:
+        """Cache part result with lock protection."""
+        async with self._get_part_cache_lock():
+            self._part_cache[lcsc] = (time.time(), result)
+            self._cleanup_part_cache_unlocked()
 
     async def get_easyeda_component(self, uuid: str) -> dict[str, Any]:
         """Fetch component symbol data from EasyEDA API.
@@ -487,13 +523,14 @@ class JLCPCBClient:
 
         # Check cache first
         now = time.time()
-        if uuid in self._easyeda_component_cache:
-            timestamp, cached_result, is_error = self._easyeda_component_cache[uuid]
-            ttl = EASYEDA_ERROR_CACHE_TTL if is_error else EASYEDA_CACHE_TTL
-            if now - timestamp < ttl:
-                if is_error:
-                    raise cached_result  # Re-raise cached error
-                return cached_result  # type: ignore
+        async with self._get_easyeda_component_cache_lock():
+            if uuid in self._easyeda_component_cache:
+                timestamp, cached_result, is_error = self._easyeda_component_cache[uuid]
+                ttl = EASYEDA_ERROR_CACHE_TTL if is_error else EASYEDA_CACHE_TTL
+                if now - timestamp < ttl:
+                    if is_error:
+                        raise cached_result  # Re-raise cached error
+                    return cached_result  # type: ignore
 
         # Use semaphore to limit concurrent requests
         async with self._get_easyeda_semaphore():
@@ -517,20 +554,17 @@ class JLCPCBClient:
                     if not data.get("success"):
                         error = ValueError("Failed to fetch component data from EasyEDA")
                         logger.warning(f"EasyEDA API error for {uuid}: {data.get('message', 'Unknown error')}")
-                        self._easyeda_component_cache[uuid] = (time.time(), error, True)
-                        self._maybe_cleanup_easyeda_component_cache()
+                        await self._cache_easyeda_component_result(uuid, error, True)
                         raise error
 
                     result = data.get("result", {})
                     if "dataStr" not in result:
                         error = ValueError("Invalid EasyEDA response - missing dataStr")
-                        self._easyeda_component_cache[uuid] = (time.time(), error, True)
-                        self._maybe_cleanup_easyeda_component_cache()
+                        await self._cache_easyeda_component_result(uuid, error, True)
                         raise error
 
                     # Cache successful result
-                    self._easyeda_component_cache[uuid] = (time.time(), result, False)
-                    self._maybe_cleanup_easyeda_component_cache()
+                    await self._cache_easyeda_component_result(uuid, result, False)
                     return result
 
                 except ValueError:
@@ -546,8 +580,7 @@ class JLCPCBClient:
             # All retries exhausted
             error = ValueError("Failed to fetch component data from EasyEDA")
             logger.warning(f"EasyEDA component fetch failed for {uuid} after {MAX_RETRIES} attempts: {last_error}")
-            self._easyeda_component_cache[uuid] = (time.time(), error, True)
-            self._maybe_cleanup_easyeda_component_cache()
+            await self._cache_easyeda_component_result(uuid, error, True)
             raise error
 
     def _build_search_params(
@@ -850,10 +883,11 @@ class JLCPCBClient:
 
         # Check cache first
         now = time.time()
-        if lcsc in self._part_cache:
-            timestamp, cached_result = self._part_cache[lcsc]
-            if now - timestamp < PART_CACHE_TTL:
-                return cached_result
+        async with self._get_part_cache_lock():
+            if lcsc in self._part_cache:
+                timestamp, cached_result = self._part_cache[lcsc]
+                if now - timestamp < PART_CACHE_TTL:
+                    return cached_result
 
         # Search for the exact part code
         params = {
@@ -875,13 +909,11 @@ class JLCPCBClient:
                 easyeda_info = await self.check_easyeda_footprint(lcsc)
                 result.update(easyeda_info)
                 # Cache the result
-                self._part_cache[lcsc] = (time.time(), result)
-                self._maybe_cleanup_part_cache()
+                await self._cache_part_result(lcsc, result)
                 return result
 
         # Cache negative result (part not found)
-        self._part_cache[lcsc] = (time.time(), None)
-        self._maybe_cleanup_part_cache()
+        await self._cache_part_result(lcsc, None)
         return None
 
     async def find_alternatives(

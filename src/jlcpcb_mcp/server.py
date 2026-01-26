@@ -77,12 +77,20 @@ mcp = FastMCP(
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Rate limiting middleware - 100 requests/minute per IP."""
+    """Rate limiting middleware - 100 requests/minute per IP.
+
+    Includes protections against memory exhaustion from IP spoofing:
+    - Maximum tracked IPs limit (10,000)
+    - Periodic cleanup of stale IPs
+    """
+
+    MAX_TRACKED_IPS = 10_000  # Prevent memory exhaustion from spoofed IPs
 
     def __init__(self, app, requests_per_minute: int = RATE_LIMIT_REQUESTS):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
-        self.request_counts: dict[str, list[float]] = defaultdict(list)
+        self.request_counts: dict[str, list[float]] = {}
+        self._last_cleanup = time.time()
 
     def _get_client_ip(self, request) -> str:
         """Extract client IP, preferring rightmost X-Forwarded-For entry.
@@ -96,22 +104,46 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return ips[-1] if ips else "unknown"
         return request.client.host if request.client else "unknown"
 
+    def _cleanup_stale_ips(self, now: float) -> None:
+        """Remove IPs with no recent requests. Called periodically."""
+        window_start = now - 60
+        stale_ips = [
+            ip for ip, timestamps in self.request_counts.items()
+            if not timestamps or timestamps[-1] < window_start
+        ]
+        for ip in stale_ips:
+            del self.request_counts[ip]
+
     def _check_rate_limit(self, client_ip: str) -> bool:
         now = time.time()
         window_start = now - 60
+
+        # Periodic cleanup every 60 seconds to remove stale IPs
+        if now - self._last_cleanup > 60:
+            self._cleanup_stale_ips(now)
+            self._last_cleanup = now
+
+        # If tracking too many IPs, do aggressive cleanup
+        if len(self.request_counts) >= self.MAX_TRACKED_IPS:
+            self._cleanup_stale_ips(now)
+            # If still at limit after cleanup, reject to prevent memory exhaustion
+            if len(self.request_counts) >= self.MAX_TRACKED_IPS:
+                return True  # Rate limit as protection
+
+        # Get or create entry for this IP
+        if client_ip not in self.request_counts:
+            self.request_counts[client_ip] = [now]
+            return False
+
         # Filter old entries
         self.request_counts[client_ip] = [
             t for t in self.request_counts[client_ip] if t > window_start
         ]
-        # If IP has no recent requests, delete the key to prevent memory growth
-        # from accumulating stale IPs, then start fresh tracking
-        if not self.request_counts[client_ip]:
-            del self.request_counts[client_ip]
-            self.request_counts[client_ip] = [now]
-            return False
+
         # Check if rate limited before adding current request
         if len(self.request_counts[client_ip]) >= self.requests_per_minute:
             return True
+
         # Add current request
         self.request_counts[client_ip].append(now)
         return False
@@ -422,8 +454,9 @@ async def find_alternatives(
 async def get_pinout(lcsc: str | None = None, uuid: str | None = None) -> dict:
     """Get pin information for a component from EasyEDA symbol data.
 
-    Useful for verifying circuit connections in Atopile/KiCad by knowing exact
-    pin names, numbers, and alternate functions.
+    Returns raw pin data exactly as EasyEDA provides it, with no interpretation
+    or guessing. Pin names are descriptive (VCC, GND, PA0, etc.) and can be
+    read directly by LLMs and users.
 
     Args:
         lcsc: LCSC part code (e.g., "C8304"). If provided, fetches UUID automatically.
@@ -440,30 +473,35 @@ async def get_pinout(lcsc: str | None = None, uuid: str | None = None) -> dict:
         - pin_count: Total number of pins
         - pins: List of pins, each with:
             - number: Physical pin number (e.g., "1", "2")
-            - name: Pin name (e.g., "PA0", "VCC", "G")
-            - functions: Alternate functions for MCU pins (e.g., ["SPI1_SCK", "ADC1_IN5"])
-            - type: Pin type ("power", "ground", "io", or "passive")
-        - summary: (MCUs only) Interface summary with power/ground pins and peripheral counts
-        - easyeda_symbol_uuid: UUID for reference
+            - name: Pin name exactly as in EasyEDA symbol
+            - electrical: (rare) EasyEDA electrical type if set by symbol creator
+        - easyeda_symbol_uuid: UUID to view symbol at easyeda.com/component/{uuid}
+        - unverified: (only if true) "Symbol not verified by LCSC"
 
-    Pin types:
-        - power: Supply pins (VCC, VDD, VBAT, 3V3, etc.)
-        - ground: Ground pins (GND, VSS, AGND, etc.)
-        - io: Input/output pins (GPIO, signal pins)
-        - passive: Numbered pins on passive components (resistors, capacitors)
+    The electrical field is only included when the symbol creator explicitly
+    set it in EasyEDA. Values: "input", "output", "bidirectional", "power".
+    Most symbols don't set this field.
 
     Example output for STM32F103CBT6:
         {"pin_count": 48, "pins": [
-            {"number": "1", "name": "VBAT", "functions": [], "type": "power"},
-            {"number": "10", "name": "PA0", "functions": ["WKUP", "USART2_CTS", "ADC12_IN0"], "type": "io"},
+            {"number": "1", "name": "VBAT"},
+            {"number": "2", "name": "PC13-TAMPER-RTC"},
+            {"number": "10", "name": "PA0_WKUPUSART2_CTSADC12_IN0TIM2_CH1_ETR"},
             ...
-        ], "summary": {"power": ["VBAT", "VDD"], "ground": ["VSS"], "interfaces": {"spi": {"count": 2, ...}}}}
+        ]}
 
     Example output for MOSFET AO3400:
         {"pin_count": 3, "pins": [
-            {"number": "1", "name": "G", "functions": [], "type": "io"},
-            {"number": "2", "name": "S", "functions": [], "type": "io"},
-            {"number": "3", "name": "D", "functions": [], "type": "io"}
+            {"number": "1", "name": "G"},
+            {"number": "2", "name": "S"},
+            {"number": "3", "name": "D"}
+        ]}
+
+    Example output for RP2040 (has electrical types):
+        {"pin_count": 57, "pins": [
+            {"number": "1", "name": "1", "electrical": "bidirectional"},
+            {"number": "2", "name": "2", "electrical": "bidirectional"},
+            ...
         ]}
     """
     if not _client:
@@ -503,7 +541,7 @@ async def get_pinout(lcsc: str | None = None, uuid: str | None = None) -> dict:
     if not pins:
         return {"error": "Invalid EasyEDA response - missing pin data"}
 
-    return {
+    result = {
         "lcsc": lcsc,
         "model": part.get("model") if part else None,
         "manufacturer": part.get("manufacturer") if part else None,
@@ -512,6 +550,12 @@ async def get_pinout(lcsc: str | None = None, uuid: str | None = None) -> dict:
         "pins": pins,
         "easyeda_symbol_uuid": symbol_uuid,
     }
+
+    # Flag unverified symbols
+    if not easyeda_data.get("verify", True):
+        result["unverified"] = "Symbol not verified by LCSC"
+
+    return result
 
 
 async def _process_bom(
