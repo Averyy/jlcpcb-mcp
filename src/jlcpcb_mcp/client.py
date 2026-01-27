@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 # UUID format pattern for EasyEDA symbols (32-char hex)
 _UUID_PATTERN = re.compile(r'^[0-9a-f]{32}$', re.IGNORECASE)
 
+
 def _normalize_manufacturer_name(name: str) -> str:
     """Normalize manufacturer name for matching: lowercase, remove punctuation, collapse spaces."""
     normalized = re.sub(r'[.,\-\(\)&]', ' ', name.lower())  # Replace punctuation with space
@@ -946,7 +947,8 @@ class JLCPCBClient:
 
         response = await self._request(JLCPCB_SEARCH_URL, params)
         data = response.get("data", {})
-        items = data.get("componentPageInfo", {}).get("list", [])
+        component_info = data.get("componentPageInfo") or {}
+        items = component_info.get("list") or []
 
         # Find exact match
         for item in items:
@@ -1040,8 +1042,17 @@ class JLCPCBClient:
         }
 
         # Add primary spec as query for more relevant results
-        if primary_value:
+        # Skip generic/unhelpful values that return no results
+        GENERIC_VALUES = {"Others", "Other", "-", "N/A", "None", ""}
+        if primary_value and primary_value not in GENERIC_VALUES:
             search_params["query"] = primary_value
+        elif not is_supported:
+            # For unsupported categories with generic primary values,
+            # use manufacturer to find similar parts from same vendor
+            # (e.g., find other ESP32 variants from Espressif)
+            manufacturer = original.get("manufacturer")
+            if manufacturer:
+                search_params["manufacturer"] = manufacturer
 
         if subcategory_id:
             search_params["subcategory_id"] = subcategory_id
@@ -1059,26 +1070,27 @@ class JLCPCBClient:
             if p.get("lcsc", "").upper() != original_lcsc
         ]
 
-        # Verify primary spec matches (JLCPCB search may return fuzzy matches)
-        verified = [
-            p for p in candidates
-            if not primary_attr or verify_primary_spec_match(original, p, primary_attr)
-        ]
-
-        # For SUPPORTED categories: filter to compatible alternatives
-        # For UNSUPPORTED categories: skip compatibility filtering
+        # For SUPPORTED categories: verify primary spec matches and compatibility
+        # For UNSUPPORTED categories: skip verification, just return similar_parts
         compatible: list[dict[str, Any]] = []
         verification_info_map: dict[str, dict[str, Any]] = {}
 
         if is_supported:
+            # Verify primary spec matches (JLCPCB search may return fuzzy matches)
+            verified = [
+                p for p in candidates
+                if not primary_attr or verify_primary_spec_match(original, p, primary_attr)
+            ]
+            # Then check full compatibility
             for p in verified:
                 is_compat, verify_info = is_compatible_alternative(original, p, subcategory_name or "")
                 if is_compat:
                     compatible.append(p)
                     verification_info_map[p.get("lcsc", "")] = verify_info
         else:
-            compatible = verified
-            # Empty verification info for unsupported categories
+            # For unsupported categories, skip strict verification
+            # Just return similar parts from same subcategory for manual comparison
+            compatible = candidates
             for p in compatible:
                 verification_info_map[p.get("lcsc", "")] = {"specs_verified": [], "specs_unparseable": []}
 

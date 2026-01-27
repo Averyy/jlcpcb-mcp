@@ -41,6 +41,8 @@ SMD_PATTERNS = frozenset({
     "SC-70", "SC-88", "SC-89",  # Small chip
     "LL-34", "LL-41", "MINIMELF", "MELF",  # Leadless cylindrical (MiniMELF)
     "MC-306", "MC-146", "MC-156", "DT-26", "DT-38",  # SMD crystal packages
+    "CASE-",  # Tantalum capacitor SMD packages (CASE-A, CASE-B, CASE-C, etc.)
+    "EIA-",  # EIA standard SMD packages (EIA-3216, etc.)
 })
 
 # Through-hole package patterns

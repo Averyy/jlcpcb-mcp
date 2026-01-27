@@ -18,8 +18,11 @@ from .key_attributes import KEY_ATTRIBUTES
 # =============================================================================
 # Pre-compile for better performance - these are called many times per request.
 
+_VOLTAGE_KV_PATTERN = re.compile(r"([\d.]+)\s*kV", re.IGNORECASE)
 _VOLTAGE_PATTERN = re.compile(r"([\d.]+)\s*V", re.IGNORECASE)
 _TOLERANCE_PATTERN = re.compile(r"([\d.]+)\s*%")
+_PPM_PATTERN = re.compile(r"[±]?([\d.]+)\s*ppm", re.IGNORECASE)
+_VF_AT_IF_PATTERN = re.compile(r"([\d.]+)\s*mV\s*@", re.IGNORECASE)
 _POWER_FRACTION_PATTERN = re.compile(r"(\d+)/(\d+)\s*W", re.IGNORECASE)
 _POWER_MW_PATTERN = re.compile(r"([\d.]+)\s*mW", re.IGNORECASE)
 _POWER_W_PATTERN = re.compile(r"([\d.]+)\s*W", re.IGNORECASE)
@@ -43,9 +46,13 @@ _DECIBEL_PATTERN = re.compile(r"([\d.]+)\s*dB", re.IGNORECASE)
 
 
 def parse_voltage(s: str) -> float | None:
-    """Parse voltage: '25V' -> 25, '6.3V' -> 6.3, '3.3V' -> 3.3"""
+    """Parse voltage: '25V' -> 25, '6.3V' -> 6.3, '5kV' -> 5000"""
     if not s:
         return None
+    # Check kV first (must come before V check)
+    match = _VOLTAGE_KV_PATTERN.search(s)
+    if match:
+        return float(match.group(1)) * 1000
     match = _VOLTAGE_PATTERN.search(s)
     return float(match.group(1)) if match else None
 
@@ -55,6 +62,27 @@ def parse_tolerance(s: str) -> float | None:
     if not s:
         return None
     match = _TOLERANCE_PATTERN.search(s)
+    return float(match.group(1)) if match else None
+
+
+def parse_ppm(s: str) -> float | None:
+    """Parse frequency stability in ppm: '±20ppm' -> 20, '30ppm' -> 30"""
+    if not s:
+        return None
+    match = _PPM_PATTERN.search(s)
+    return float(match.group(1)) if match else None
+
+
+def parse_forward_voltage(s: str) -> float | None:
+    """Parse forward voltage from Vf@If format: '550mV@3A' -> 0.55V, '1V@100mA' -> 1.0V"""
+    if not s:
+        return None
+    # Try mV format first (e.g., "550mV@3A")
+    match = _VF_AT_IF_PATTERN.search(s)
+    if match:
+        return float(match.group(1)) / 1000  # Convert mV to V
+    # Try V format (e.g., "1V@100mA")
+    match = _VOLTAGE_PATTERN.search(s)
     return float(match.group(1)) if match else None
 
 
@@ -269,12 +297,12 @@ SPEC_PARSERS: dict[str, Callable[[str], float | None] | str | None] = {
     "Rated Voltage (Max)": parse_voltage,
     "Collector-Emitter Breakdown Voltage (Vces)": parse_voltage,
     "Vce Saturation(VCE(sat))": parse_voltage,
-    "Voltage - Forward(Vf@If)": parse_voltage,
+    "Voltage - Forward(Vf@If)": parse_forward_voltage,
     "Voltage - DC Spark Over": parse_voltage,
     "Voltage - Supply": parse_voltage,  # For buzzers, etc.
     # Tolerances (percentage-based)
     "Tolerance": parse_tolerance,
-    "Frequency Stability": parse_tolerance,  # ±ppm is like tolerance
+    "Frequency Stability": parse_ppm,  # ±20ppm format
     # Power
     "Power(Watts)": parse_power,
     "Pd - Power Dissipation": parse_power,
@@ -359,6 +387,14 @@ SPEC_PARSERS: dict[str, Callable[[str], float | None] | str | None] = {
     "Encoder Type": None,
     "Energy": None,
     "Sound Pressure Level": parse_decibels,
+    # Battery Management
+    "Type of Battery": None,
+    "Number of Cells": None,
+    "Charge Current - Max": parse_current,
+    # Level Shifters
+    "Channel Type": None,
+    # Wireless Modules
+    "Output Power": parse_power,
 }
 
 # Specs that use exact string matching (case-insensitive)
@@ -411,6 +447,11 @@ STRING_MATCH_SPECS = {
     "Number of Segments",
     "Direction",
     "Encoder Type",
+    # Battery Management
+    "Type of Battery",
+    "Number of Cells",
+    # Level Shifters
+    "Channel Type",
 }
 
 
@@ -966,6 +1007,13 @@ COMPATIBILITY_RULES: dict[str, dict[str, Any]] = {
             "Voltage Dropout": "lower",
         },
     },
+    "DC-DC Converters": {
+        "primary": "Output Voltage",
+        "must_match": ["Topology", "Output Voltage"],  # Buck, Boost, Buck-Boost must match
+        "same_or_better": {
+            "Output Current": "higher",
+        },
+    },
     "Voltage Reference": {
         "primary": "Output Voltage",
         "must_match": ["Output Voltage"],
@@ -1234,6 +1282,41 @@ COMPATIBILITY_RULES: dict[str, dict[str, Any]] = {
         "same_or_better": {
             "Rated Voltage (Max)": "higher",
             "Current Rating (Max)": "higher",
+        },
+    },
+    # ============== BATTERY MANAGEMENT ==============
+    "Battery Management": {
+        "primary": "Type of Battery",
+        "must_match": ["Type of Battery", "Number of Cells"],
+        "same_or_better": {
+            "Charge Current - Max": "higher",
+        },
+    },
+    # ============== LEVEL SHIFTERS ==============
+    "Translators, Level Shifters": {
+        "primary": "Channel Type",
+        "must_match": ["Channel Type"],  # Bidirectional vs Unidirectional
+    },
+    # ============== WIRELESS MODULES ==============
+    "WiFi Modules": {
+        "primary": "Voltage - Supply",
+        "must_match": ["Voltage - Supply"],
+        "same_or_better": {
+            "Output Power": "higher",
+        },
+    },
+    "Bluetooth Modules": {
+        "primary": "Voltage - Supply",
+        "must_match": ["Voltage - Supply"],
+        "same_or_better": {
+            "Output Power": "higher",
+        },
+    },
+    "LoRa Modules": {
+        "primary": "Frequency",
+        "must_match": ["Frequency", "Voltage - Supply"],
+        "same_or_better": {
+            "Output Power": "higher",
         },
     },
 }

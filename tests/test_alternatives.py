@@ -6,6 +6,8 @@ from jlcpcb_mcp.alternatives import (
     # Parsers
     parse_voltage,
     parse_tolerance,
+    parse_ppm,
+    parse_forward_voltage,
     parse_power,
     parse_current,
     parse_resistance,
@@ -46,6 +48,11 @@ class TestParseVoltage:
         assert parse_voltage("25v") == 25.0
         assert parse_voltage("25V") == 25.0
 
+    def test_kilovolts(self):
+        assert parse_voltage("5kV") == 5000.0
+        assert parse_voltage("3.75kV") == 3750.0
+        assert parse_voltage("1.5 kV") == 1500.0
+
     def test_invalid(self):
         assert parse_voltage("") is None
         assert parse_voltage(None) is None  # type: ignore
@@ -67,6 +74,50 @@ class TestParseTolerance:
     def test_invalid(self):
         assert parse_tolerance("") is None
         assert parse_tolerance("abc") is None
+
+
+class TestParsePpm:
+    """Tests for parse_ppm function."""
+
+    def test_with_plus_minus(self):
+        assert parse_ppm("±20ppm") == 20.0
+        assert parse_ppm("±10ppm") == 10.0
+        assert parse_ppm("±50ppm") == 50.0
+
+    def test_without_plus_minus(self):
+        assert parse_ppm("20ppm") == 20.0
+        assert parse_ppm("30ppm") == 30.0
+
+    def test_with_space(self):
+        assert parse_ppm("20 ppm") == 20.0
+        assert parse_ppm("±10 ppm") == 10.0
+
+    def test_case_insensitive(self):
+        assert parse_ppm("20PPM") == 20.0
+        assert parse_ppm("20Ppm") == 20.0
+
+    def test_invalid(self):
+        assert parse_ppm("") is None
+        assert parse_ppm("abc") is None
+        assert parse_ppm("20%") is None
+
+
+class TestParseForwardVoltage:
+    """Tests for parse_forward_voltage function."""
+
+    def test_millivolt_format(self):
+        assert parse_forward_voltage("550mV@3A") == 0.55
+        assert parse_forward_voltage("350mV@1A") == 0.35
+        assert parse_forward_voltage("600 mV @ 2A") == 0.6
+
+    def test_volt_format(self):
+        assert parse_forward_voltage("1V@100mA") == 1.0
+        assert parse_forward_voltage("1.2V@20mA") == 1.2
+        assert parse_forward_voltage("3.3V@10mA") == 3.3
+
+    def test_invalid(self):
+        assert parse_forward_voltage("") is None
+        assert parse_forward_voltage("abc") is None
 
 
 class TestParsePower:

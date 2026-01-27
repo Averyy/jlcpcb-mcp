@@ -19,6 +19,8 @@ class TestDetectMountingType:
         "DO-214AC", "SMA", "SMB", "SMC",  # Diode SMD
         "SC-70-5", "SC-88",  # Small chip
         "SMD,4x3mm",  # JLCPCB format with SMD prefix
+        "CASE-A", "CASE-B", "CASE-C", "CASE-D",  # Tantalum capacitor SMD
+        "EIA-3216", "EIA-3528-21",  # EIA standard SMD packages
     ])
     def test_smd_packages(self, package):
         """SMD packages should return 'smd'."""

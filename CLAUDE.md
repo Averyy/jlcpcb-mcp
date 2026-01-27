@@ -21,6 +21,8 @@ Use semantic versioning (MAJOR.MINOR.PATCH):
 
 MCP server for searching JLCPCB electronic components for PCB assembly. Searches 1.5M+ parts across 52 categories with real-time stock and pricing.
 
+**Status:** Beta - breaking changes are acceptable to improve functionality.
+
 **Website:** https://jlcmcp.dev
 **MCP Endpoint:** https://jlcmcp.dev/mcp
 **Health Check:** https://jlcmcp.dev/health
@@ -98,7 +100,7 @@ jlcpcb-mcp/
 │   ├── bom.py              # BOM generation and validation
 │   ├── pinout.py           # EasyEDA pinout parser
 │   ├── mounting.py         # Mounting type detection (SMD vs through-hole)
-│   ├── alternatives.py     # Spec-aware alternative finding (120+ subcategories)
+│   ├── alternatives.py     # Spec-aware alternative finding (125+ subcategories)
 │   ├── categories.py       # 52 categories + subcategories
 │   └── key_attributes.py   # Key specs mapping (758 subcategories)
 ├── landing/                # Website at jlcmcp.dev
@@ -173,7 +175,7 @@ Uses **spec-aware compatibility checking** to find verified alternatives for 120
 
 **Cost optimization:** Use `library_type="no_fee"` to find basic/preferred alternatives that avoid the $3 extended part fee.
 
-**Supported subcategories include:** Resistors, capacitors (MLCC, electrolytic, tantalum, film), inductors, ferrite beads, MOSFETs, BJTs, JFETs, IGBTs, diodes (Schottky, Zener, general purpose, TVS), fuses, thermistors, LEDs, optocouplers, crystals, oscillators, LDO regulators, voltage references, digital isolators, switches (tactile, DIP, toggle, rocker), relays (power, signal, solid state), connectors (headers, terminals, USB, HDMI), and more.
+**Supported subcategories include:** Resistors, capacitors (MLCC, electrolytic, tantalum, film), inductors, ferrite beads, MOSFETs, BJTs, JFETs, IGBTs, diodes (Schottky, Zener, general purpose, TVS), fuses, thermistors, LEDs, optocouplers, crystals, oscillators, LDO regulators, DC-DC converters (Buck/Boost/Buck-Boost topology matching), voltage references, digital isolators, battery management ICs, level shifters, WiFi/Bluetooth/LoRa modules, switches (tactile, DIP, toggle, rocker), relays (power, signal, solid state), connectors (headers, terminals, USB, HDMI), and more.
 
 ### get_pinout Tool
 

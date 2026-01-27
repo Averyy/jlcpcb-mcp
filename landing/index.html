@@ -963,7 +963,7 @@
                             <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                         </div>
                         <div class="code-body">
-                            <pre>claude mcp add --transport http jlcmcp https://jlcmcp.dev/mcp</pre>
+                            <pre>claude mcp add --transport http <span class="string">jlcmcp</span> <span class="string">https://jlcmcp.dev/mcp</span></pre>
                         </div>
                     </div>
                     <div class="code-block" style="margin-bottom: 16px;">
@@ -977,7 +977,7 @@
                             <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                         </div>
                         <div class="code-body">
-                            <pre>claude mcp add -s user --transport http jlcmcp https://jlcmcp.dev/mcp</pre>
+                            <pre>claude mcp add -s user --transport http <span class="string">jlcmcp</span> <span class="string">https://jlcmcp.dev/mcp</span></pre>
                         </div>
                     </div>
                     <div class="code-block">
@@ -987,18 +987,25 @@
                                 <div class="terminal-dot"></div>
                                 <div class="terminal-dot"></div>
                             </div>
-                            <span class="terminal-title">Allow all tools (optional) — add to ~/.claude/settings.json</span>
+                            <span class="terminal-title">~/.claude/settings.json</span>
                             <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                         </div>
                         <div class="code-body">
-                            <pre>"mcp__jlcmcp__search_parts",
-"mcp__jlcmcp__get_part",
-"mcp__jlcmcp__find_alternatives",
-"mcp__jlcmcp__list_categories",
-"mcp__jlcmcp__get_subcategories",
-"mcp__jlcmcp__validate_bom",
-"mcp__jlcmcp__export_bom",
-"mcp__jlcmcp__get_version"</pre>
+                            <pre>{
+  <span class="string">"permissions"</span>: {
+    <span class="string">"allow"</span>: [
+      <span class="string">"mcp__jlcmcp__search_parts"</span>,
+      <span class="string">"mcp__jlcmcp__get_part"</span>,
+      <span class="string">"mcp__jlcmcp__get_pinout"</span>,
+      <span class="string">"mcp__jlcmcp__find_alternatives"</span>,
+      <span class="string">"mcp__jlcmcp__list_categories"</span>,
+      <span class="string">"mcp__jlcmcp__get_subcategories"</span>,
+      <span class="string">"mcp__jlcmcp__validate_bom"</span>,
+      <span class="string">"mcp__jlcmcp__export_bom"</span>,
+      <span class="string">"mcp__jlcmcp__get_version"</span>
+    ]
+  }
+}</pre>
                         </div>
                     </div>
                 </div>
@@ -1130,11 +1137,12 @@
                 <div class="bento-grid">
                     <div class="bento-card bento-large">
                         <div class="icon-wrapper"><span class="icon">🛠️</span></div>
-                        <h3>8 MCP Tools</h3>
+                        <h3>9 MCP Tools</h3>
                         <div class="tools-list">
                             <div class="tool-item"><code>search_parts</code> <span>Search with filters and sorting by quantity/price</span></div>
                             <div class="tool-item"><code>get_part</code> <span>Full details, datasheets, and EasyEDA footprint status</span></div>
-                            <div class="tool-item"><code>find_alternatives</code> <span>Find similar parts, filter by library type or footprint</span></div>
+                            <div class="tool-item"><code>get_pinout</code> <span>Get component pin information from EasyEDA symbol</span></div>
+                            <div class="tool-item"><code>find_alternatives</code> <span>Spec-aware compatible alternatives for 120+ subcategories</span></div>
                             <div class="tool-item"><code>list_categories</code> <span>Browse all 52 component categories</span></div>
                             <div class="tool-item"><code>get_subcategories</code> <span>Drill into subcategories for precise discovery</span></div>
                             <div class="tool-item"><code>validate_bom</code> <span>Check stock, pricing, and issues before export</span></div>

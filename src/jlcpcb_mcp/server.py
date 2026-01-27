@@ -568,6 +568,12 @@ async def get_pinout(lcsc: str | None = None, uuid: str | None = None) -> dict:
         easyeda_data = await _client.get_easyeda_component(symbol_uuid)
     except ValueError as e:
         return {"error": str(e)}
+    except Exception as e:
+        return {"error": f"Failed to fetch EasyEDA data: {e}"}
+
+    # Check for valid response
+    if not easyeda_data or not isinstance(easyeda_data, dict):
+        return {"error": f"Invalid EasyEDA response for {lcsc or symbol_uuid}"}
 
     # Parse pins from EasyEDA data
     pins = parse_easyeda_pins(easyeda_data)
